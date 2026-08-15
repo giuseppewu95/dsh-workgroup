@@ -1,0 +1,106 @@
+# dsh-workgroup
+
+DeepSeek Harness 的可分发插件：带角色的持久会话分组（工作群）、跨会话消息投递，以及浏览器端成员面板。
+
+用它可以跑真正的跨会话协作闭环——一个会话统筹/规划/审查，一个会话执行，一个会话测试验证，主会话作为协调者：
+
+```
+主会话（统筹/规划/审查） ──工作群──▶ 执行会话
+        │                            │
+        └────────── 工作群 ──────────▶ 测试会话
+```
+
+## 功能
+
+| 组成 | 说明 |
+|---|---|
+| `ctx.workgroups` | Host 服务：持久注册表（基于 storage-domain）、成员管理、授权跨会话投递 |
+| `workgroup_create` / `workgroup_list` / `workgroup_send` / `workgroup_members` | 模型工具：建群、分配角色（规划/执行/测试…）、向成员会话发消息 |
+| 浏览器面板 | 会话头部按钮：列出本会话所属群与成员（角色 + 运行状态），点击成员直接打开该会话 |
+| `workgroup` 消息源 | 投递到目标会话的消息以 `user/message`（`source.kind: 'workgroup'`）落日志——模型可见、可从日志重建 |
+
+### 跨会话投递如何工作
+
+授权依据是**持久成员关系**而非血缘：发送者会话与目标必须是同一群成员，禁止自我发送。目标按身份分派：
+
+- **在线顶层会话**：消息作为其下一轮次送达（`agent.followup`）；
+- **冷顶层会话**：按身份去重恢复一次（与内置 API 解析器一致）后送达；
+- **发送者的可继续子会话**：委托 `ctx.subagents.followup`，复用子会话 inbox 与冷恢复；
+- 其余情况（一次性子会话、他人子会话、未知或已删会话）：返回类型化错误，**不投递**。
+
+## 安装
+
+前置：dsh ≥ 0.1.0-rc.6，`web` profile（或任何挂载了 `storage-json` + `storage-domain` 的 profile）。
+
+```sh
+# 从 npm（发布后）
+dsh plugin --profile web add dsh-workgroup
+
+# 或直接从本仓库
+dsh plugin --profile web add github:your-name/dsh-workgroup
+```
+
+然后重启 `dsh --profile web`。会话头部出现「工作群」按钮（有工作群时可见）。
+
+> TUI/headless profile 同样可用：模型工具与服务与平台无关，只有浏览器面板依赖 web 界面。非 web profile 需自行挂载 `@deepseek-ai/dsh-storage-json` + `@deepseek-ai/dsh-storage-domain`（web profile 已内置）。
+
+## 用法
+
+1. **主会话规划**：把工作委派给 subagent，或打开你想要的会话。
+2. **建群**：`workgroup_create`（标题 + 可选初始成员），之后可用 `workgroup_members add` 追加。
+3. **分配角色**：`workgroup_members set_role`，标签如 `规划`、`执行`、`测试`。
+4. **派发工作**：`workgroup_send` 给成员会话——消息成为该会话的下一轮次。
+5. **审查**：用 `session_trace` / `session_event_read` 读成员会话日志（按 workspace 授权），再把意见经工作群发回。
+6. **实时查看**：浏览器面板显示成员角色与运行状态，点击即可打开对应会话。
+
+```text
+你（规划会话）：
+  workgroup_create(title: "发布流程", members: [{session_id: "<exec>", role: "执行"}, {session_id: "<test>", role: "测试"}])
+  workgroup_send(group_id: "<g>", target_session_id: "<exec>", message: "按计划实现 X，完成后发报告")
+  workgroup_send(group_id: "<g>", target_session_id: "<test>", message: "等实现完成后跑回归测试")
+
+执行会话（每条消息作为下一轮次收到）：
+  ...工作...
+  report: "X 已完成，见 <path>"
+
+你：
+  session_trace(session_id: "<exec>")          # 核对实际落地内容
+  workgroup_send(group_id: "<g>", target_session_id: "<test>", message: "可以开始回归")
+```
+
+## 开发
+
+```sh
+npm install
+npm run typecheck    # tsc --noEmit
+npm test             # vitest：单元 + 组件 + 组合
+npm run build        # esbuild：lib/index.js（host ESM）+ lib/client.js（浏览器）
+```
+
+浏览器 bundle 采用 harness 的模块加载器格式（`window.__ModuleLoader__.load`），平台模块保持 external；host 半面所有依赖 external，运行时从 profile 安装解析。
+
+### 包结构
+
+```
+cordis.patch.yml     # bundle patch：一行同时挂载两个半面
+src/index.ts         # host 入口：注册表服务 + 工具 + web API
+src/registry.ts      # ctx.workgroups 服务（持久注册表 + 投递）
+src/spec.ts          # storage-domain spec（zod schema）
+src/delivery.ts      # 基于身份的目标准则与投递
+src/tools.ts         # workgroup_* 模型工具 + prompt section
+src/web-api.ts       # 供浏览器半面读取的只读 /workgroup JSON API
+src/client/          # 浏览器半面：头部面板、locales、样式
+tests/               # vitest（spec/registry/tools/web-api/panel/composition）
+```
+
+## 已知限制与待办
+
+- 浏览器面板只读（列表 + 跳转）；建群与加员通过模型工具完成。
+- 工作群消息是群内点对点，暂不支持群广播。
+- 成员权限平等；`ownerSessionId` 仅作记录（owner 不可被移除，但无额外权限）。
+- 群可跨 workspace（消息投递不校验 `cwd`）；读取成员日志仍受 `session_trace` / `session_event_read` 的 workspace 授权约束。
+- 销毁群只删除群记录；已投递消息保留在成员会话日志中（日志不可变）。
+
+## License
+
+MIT

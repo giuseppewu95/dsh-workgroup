@@ -1,0 +1,14 @@
+# dsh-workgroup bundle patch: installs the host service/tools and the
+# browser half (dsh.client) in one row. Users install the package with
+#   dsh plugin --profile web add dsh-workgroup
+# or from a git URL; this patch then mounts the row.
+#
+# One row suffices for both halves: the Loader mounts the host half, and
+# client-modules scans every Loader entry for a `dsh.client` declaration in
+# the package manifest, so the same row lands the browser bundle on the
+# roster. A second row naming the same package would re-run the host apply
+# and double-register the `workgroups` service.
+
+- insert:
+    - id: workgroup
+      name: 'dsh-workgroup'
