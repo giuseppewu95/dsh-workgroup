@@ -14,11 +14,11 @@
   "author": "dsh-workgroup contributors",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/your-name/dsh-workgroup.git"
+    "url": "git+https://github.com/giuseppewu95/dsh-workgroup.git"
   },
-  "homepage": "https://github.com/your-name/dsh-workgroup#readme",
+  "homepage": "https://github.com/giuseppewu95/dsh-workgroup#readme",
   "bugs": {
-    "url": "https://github.com/your-name/dsh-workgroup/issues"
+    "url": "https://github.com/giuseppewu95/dsh-workgroup/issues"
   },
   "engines": {
     "node": "^22.19.0 || >=24.0.0"

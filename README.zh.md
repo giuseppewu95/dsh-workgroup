@@ -37,7 +37,7 @@ DeepSeek Harness 的可分发插件：带角色的持久会话分组（工作群
 dsh plugin --profile web add dsh-workgroup
 
 # 或直接从本仓库
-dsh plugin --profile web add github:your-name/dsh-workgroup
+dsh plugin --profile web add github:giuseppewu95/dsh-workgroup
 ```
 
 然后重启 `dsh --profile web`。会话头部出现「工作群」按钮（有工作群时可见）。

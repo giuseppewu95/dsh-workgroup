@@ -37,7 +37,7 @@ Prerequisites: dsh ≥ 0.1.0-rc.6, the `web` profile (or any profile with `stora
 dsh plugin --profile web add dsh-workgroup
 
 # or straight from this repository
-dsh plugin --profile web add github:your-name/dsh-workgroup
+dsh plugin --profile web add github:giuseppewu95/dsh-workgroup
 ```
 
 Then restart `dsh --profile web`. The session header shows a "工作群" button once any workgroup exists.
