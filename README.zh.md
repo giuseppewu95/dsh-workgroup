@@ -15,7 +15,7 @@ DeepSeek Harness 的可分发插件：带角色的持久会话分组（工作群
 | 组成 | 说明 |
 |---|---|
 | `ctx.workgroups` | Host 服务：持久注册表（基于 storage-domain）、成员管理、授权跨会话投递 |
-| `workgroup_create` / `workgroup_list` / `workgroup_send` / `workgroup_members` / `workgroup_destroy` | 模型工具：建群、分配角色（规划/执行/测试…）、向成员会话发消息、解散自己创建的群 |
+| `workgroup_create` / `workgroup_list` / `workgroup_send` / `workgroup_members` / `workgroup_destroy` / `workgroup_status` | 模型工具：建群、分配角色（规划/执行/测试…）、向成员会话发消息、解散自己创建的群、查询已投递消息的观测状态 |
 | 浏览器面板 | 会话头部按钮：列出本会话所属群与成员（角色 + 运行状态），点击成员直接打开该会话 |
 | `workgroup` 消息源 | 投递到目标会话的消息以 `user/message`（`source.kind: 'workgroup'`）落日志——模型可见、可从日志重建 |
 
@@ -119,6 +119,7 @@ AGENTS.md            # 新手会话快速上手：结构、命令、设计要点
 - 群可跨 workspace（消息投递不校验 `cwd`）；阅读成员记录通过 GUI 打开该会话，或让成员经工作群回传结果。
 - 销毁群只删除群记录；已投递消息保留在成员会话日志中（日志不可变）。
 - `/workgroup` HTTP API 采用与 harness `/api` 相同的 confused-deputy 防护（回环 Host + 同源浏览器标记；因 harness 未导出其围栏，插件本地镜像同一规则）。这不是认证层；可达性仍由 webserver 绑定策略决定。
+- 投递状态（`workgroup_send` 的 message_id + `workgroup_status`）基于目标会话的持久生命周期事件在进程内观测：`accepted → queued → started → turn_completed | failed`。`turn_completed` 表示**包含**该消息的 turn 已结束——不是逐消息消费证明。目标在另一进程处理（或重启后）时，状态停留在最后一次进程内观测（`unknown`）。
 - 构建产物（`lib/`）已提交到仓库，git 安装无需构建步骤；发布前请重新 `npm run build`。
 
 ## License

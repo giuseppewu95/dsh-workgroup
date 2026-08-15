@@ -59,7 +59,7 @@ function storageGroups() {
 }
 
 /** Drive three agents to mutual quiescence and report the collaboration. */
-async function run(ctx, io) {
+async function run(ctx, io, statuses) {
   await ctx.get('loader')?.await()
   const agents = ctx.get('agents')
   const defaultModel = ctx.get('agentDefaultModel')
@@ -140,6 +140,7 @@ async function run(ctx, io) {
     groups: storageGroups(),
     fib_exists: existsSync(`${process.cwd()}/fib.py`),
     timeout: Date.now() - startedAt >= MAX_MS,
+    message_statuses: statuses,
   }
   io.stdout.write('E2E_COLLAB_RESULT ' + JSON.stringify(report) + '\n')
   io.exit(0)
@@ -149,7 +150,16 @@ export function apply(ctx) {
   const exit = ctx.get('appExit')
   if (exit === undefined) throw new Error('e2e-collab: the launcher must provide ctx.appExit')
   const io = { stdout: process.stdout, stderr: process.stderr, exit }
-  run(ctx, io).catch((error) => {
+  // Collect every delivery-status transition observed in this process so the
+  // orchestrator can assert the ack state machine against a real run.
+  const statuses = []
+  ctx.on('workgroup/message-status', (change) => {
+    statuses.push({
+      status: change.status,
+      target: String(change.targetSessionId).slice(0, 12),
+    })
+  })
+  run(ctx, io, statuses).catch((error) => {
     io.stderr.write(`e2e-collab: ${error instanceof Error ? error.message : String(error)}\n`)
     io.exit(1)
   })

@@ -8,6 +8,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { MessageId } from '@deepseek-ai/dsh-llm'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { WorkgroupError } from './error.ts'
@@ -153,6 +154,7 @@ export function applyTools(ctx: Context): void {
         additionalProperties: false,
         properties: {
           delivered: { type: 'boolean', required: true },
+          message_id: { type: 'string', required: true },
         },
       },
       render: (_args, value) => [{
@@ -162,14 +164,14 @@ export function applyTools(ctx: Context): void {
     },
     async execute(args, exec) {
       const agent = requireAgent(exec.agent)
-      await ctx.workgroups.send({
+      const result = await ctx.workgroups.send({
         sender: agent,
         groupId: WorkgroupId(args.group_id),
         targetSessionId: SessionId(args.target_session_id),
         content: [{ type: 'text', text: args.message }],
         signal: exec.signal,
       })
-      return { delivered: true }
+      return { delivered: true, message_id: result.messageId }
     },
   }))
 
@@ -264,6 +266,45 @@ export function applyTools(ctx: Context): void {
       }
       await ctx.workgroups.destroy(groupId)
       return `workgroup "${groupId}" destroyed`
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'workgroup_status',
+    description:
+      'Query the delivery status of one workgroup message sent to a member session. Status is observed '
+      + 'in-process and moves forward: accepted → queued → started → turn_completed | failed. '
+      + 'turn_completed means the turn CONTAINING the message ended — the target may have processed other '
+      + 'messages in the same turn, so it is not a per-message consumption proof. unknown means this process '
+      + 'has no record (e.g. after a restart or delivery from another process).',
+    parameters: {
+      group_id: {
+        type: 'string',
+        required: true,
+        description: 'Workgroup id returned by workgroup_create or workgroup_list.',
+      },
+      message_id: {
+        type: 'string',
+        required: true,
+        description: 'Message id returned by workgroup_send.',
+      },
+    },
+    output: {
+      schema: { type: 'string' },
+      render: (_args, value) => [{ type: 'text', text: value }],
+    },
+    async execute(args, exec) {
+      const agent = requireAgent(exec.agent)
+      const groupId = WorkgroupId(args.group_id)
+      const view = ctx.workgroups.get(groupId)
+      if (view === undefined) {
+        throw new WorkgroupError('WORKGROUP_NOT_FOUND', `workgroup "${groupId}" does not exist`)
+      }
+      if (!view.members.some(member => member.sessionId === agent.id)) {
+        throw new WorkgroupError('WORKGROUP_NOT_MEMBER', `session "${agent.id}" is not a member of this workgroup`)
+      }
+      const status = ctx.workgroups.statusOf(groupId, args.message_id as MessageId)
+      return status === undefined ? 'unknown' : status
     },
   }))
 }

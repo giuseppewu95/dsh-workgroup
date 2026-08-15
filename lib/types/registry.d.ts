@@ -8,8 +8,9 @@
  */
 import { Context, Service } from '@deepseek-ai/cordis';
 import type { Agent } from '@deepseek-ai/dsh-agent';
-import type { ContentBlock } from '@deepseek-ai/dsh-llm';
+import type { ContentBlock, MessageId } from '@deepseek-ai/dsh-llm';
 import type { SessionId } from '@deepseek-ai/dsh-session';
+import { type WorkgroupMessageStatus, type WorkgroupMessageStatusChange } from './ack.ts';
 import { WorkgroupId, type WorkgroupView } from './types.ts';
 export { WorkgroupError } from './error.ts';
 export type { WorkgroupErrorCode } from './error.ts';
@@ -17,6 +18,8 @@ export { workgroupDomainSpec, workgroupDomainState, workgroupRecord } from './sp
 export type { WorkgroupDomainState, WorkgroupRecord } from './spec.ts';
 export type { WorkgroupMember, WorkgroupView } from './types.ts';
 export { WorkgroupId } from './types.ts';
+export { foldStatus } from './ack.ts';
+export type { WorkgroupMessageStatus, WorkgroupMessageStatusChange } from './ack.ts';
 declare module '@deepseek-ai/cordis' {
     interface Context {
         workgroups: WorkgroupRegistry;
@@ -30,6 +33,8 @@ declare module '@deepseek-ai/cordis' {
         }): void;
         'workgroup/member-added'(change: WorkgroupMemberChange): void;
         'workgroup/member-removed'(change: WorkgroupMemberChange): void;
+        /** One observed forward status transition of a delivered message. */
+        'workgroup/message-status'(change: WorkgroupMessageStatusChange): void;
     }
 }
 /** Options for creating a workgroup. */
@@ -59,6 +64,12 @@ export interface WorkgroupSendOptions {
     readonly content: ContentBlock[];
     readonly signal: AbortSignal;
 }
+/** Result of a successful send. */
+export interface WorkgroupSendResult {
+    readonly delivered: true;
+    /** Stable message id, observable in the target session log. */
+    readonly messageId: MessageId;
+}
 /** Event payload shared by the member-mutation events. */
 export interface WorkgroupMemberChange {
     readonly groupId: WorkgroupId;
@@ -75,6 +86,7 @@ export interface WorkgroupMemberChange {
 export declare class WorkgroupRegistry extends Service {
     static inject: string[];
     private readonly groups;
+    private readonly messageStatus;
     private table;
     private global;
     private state;
@@ -144,10 +156,24 @@ export declare class WorkgroupRegistry extends Service {
      * resolves the target (live, cold-resumed top-level, or the sender's
      * continuable child) and appends the `workgroup`-sourced user message.
      * @param options - sender, group, target, content, and cancellation.
+     * @returns the stable message id of the delivered message.
      * @throws {WorkgroupError} on authorization or delivery failures; the
      *   message is not delivered on any rejection.
      */
-    send(options: WorkgroupSendOptions): Promise<void>;
+    send(options: WorkgroupSendOptions): Promise<WorkgroupSendResult>;
+    /**
+     * Query the in-process delivery status of one message.
+     * @param groupId - the workgroup the message traveled through.
+     * @param messageId - the message id returned by {@link send}.
+     * @returns the last observed status, or `undefined` when unknown in this
+     *   process (e.g. after a restart, or delivered by another process).
+     */
+    statusOf(groupId: WorkgroupId, messageId: MessageId): WorkgroupMessageStatus | undefined;
+    /** Fold one target-session lifecycle event into the status map. */
+    private observeSessionEvent;
+    /** Advance one record through the state machine (idempotent, forward-only). */
+    private observe;
+    private transition;
     private require;
     private updateRecord;
     private viewOf;

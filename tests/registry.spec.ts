@@ -512,4 +512,101 @@ describe('resource limits', () => {
   })
 })
 
+describe('delivery status observation', () => {
+  /** One live delivery plus the fake session/event source for the target. */
+  async function delivered() {
+    const { ctx, registry, addAgent } = await harness()
+    const group = await registry.create({ title: 'g', owner: SessionId('s1') })
+    await registry.addMember({ groupId: group.id, sessionId: SessionId('s2'), role: '执行' })
+    const sender = fakeAgent('s1')
+    const receiver = fakeAgent('s2')
+    receiver.followup = () => {}
+    addAgent(sender)
+    addAgent(receiver)
+    const result = await registry.send({
+      sender,
+      groupId: group.id,
+      targetSessionId: SessionId('s2'),
+      content: [{ type: 'text', text: '去执行' }],
+      signal,
+    })
+    const target = { id: SessionId('s2') }
+    return { ctx, registry, group, result, target }
+  }
+
+  /** Emit one target-session lifecycle event through the cordis event bus. */
+  function emit(ctx: Context, target: { id: SessionId }, type: string, data: unknown): void {
+    ctx.emit('session/event', target, { type, data })
+  }
+
+  it('records accepted on send and advances through observed lifecycle events', async () => {
+    const { ctx, registry, group, result, target } = await delivered()
+    expect(registry.statusOf(group.id, result.messageId)).toBe('accepted')
+
+    emit(ctx, target, 'agent/inbox/spliced', { target: 'next-turn', inserted: [{ id: result.messageId }] })
+    expect(registry.statusOf(group.id, result.messageId)).toBe('queued')
+
+    emit(ctx, target, 'user/message', { id: result.messageId })
+    expect(registry.statusOf(group.id, result.messageId)).toBe('started')
+
+    emit(ctx, target, 'turn/end', { reason: { kind: 'completed' } })
+    expect(registry.statusOf(group.id, result.messageId)).toBe('turn_completed')
+  })
+
+  it('maps an error turn to failed and freezes terminal states', async () => {
+    const { ctx, registry, group, result, target } = await delivered()
+    emit(ctx, target, 'agent/inbox/spliced', { target: 'next-turn', inserted: [{ id: result.messageId }] })
+    emit(ctx, target, 'user/message', { id: result.messageId })
+    emit(ctx, target, 'turn/end', { reason: { kind: 'error', error: { code: 'X' } } })
+    expect(registry.statusOf(group.id, result.messageId)).toBe('failed')
+    // Post-terminal observations are ignored.
+    emit(ctx, target, 'user/message', { id: result.messageId })
+    expect(registry.statusOf(group.id, result.messageId)).toBe('failed')
+  })
+
+  it('ignores unrelated sessions, other message ids, and non-terminal turn reasons', async () => {
+    const { ctx, registry, group, result, target } = await delivered()
+    const other = { id: SessionId('s9') }
+    emit(ctx, other, 'agent/inbox/spliced', { target: 'next-turn', inserted: [{ id: result.messageId }] })
+    expect(registry.statusOf(group.id, result.messageId)).toBe('accepted')
+    emit(ctx, target, 'agent/inbox/spliced', { target: 'next-turn', inserted: [{ id: 'other-id' }] })
+    emit(ctx, target, 'user/message', { id: 'other-id' })
+    expect(registry.statusOf(group.id, result.messageId)).toBe('accepted')
+    emit(ctx, target, 'turn/end', { reason: { kind: 'blocked' } })
+    expect(registry.statusOf(group.id, result.messageId)).toBe('accepted')
+  })
+
+  it('emits workgroup/message-status for every forward transition', async () => {
+    const { ctx, registry, addAgent } = await harness()
+    const group = await registry.create({ title: 'g', owner: SessionId('s1') })
+    await registry.addMember({ groupId: group.id, sessionId: SessionId('s2'), role: '执行' })
+    const sender = fakeAgent('s1')
+    const receiver = fakeAgent('s2')
+    receiver.followup = () => {}
+    addAgent(sender)
+    addAgent(receiver)
+    const seen: string[] = []
+    ctx.on('workgroup/message-status', (change: { messageId: string; status: string }) => {
+      seen.push(`${change.status}`)
+    })
+    const result = await registry.send({
+      sender,
+      groupId: group.id,
+      targetSessionId: SessionId('s2'),
+      content: [{ type: 'text', text: '去执行' }],
+      signal,
+    })
+    const target = { id: SessionId('s2') }
+    emit(ctx, target, 'agent/inbox/spliced', { target: 'next-turn', inserted: [{ id: result.messageId }] })
+    emit(ctx, target, 'user/message', { id: result.messageId })
+    emit(ctx, target, 'turn/end', { reason: { kind: 'completed' } })
+    expect(seen).toEqual(['accepted', 'queued', 'started', 'turn_completed'])
+  })
+
+  it('returns unknown for ids not recorded in this process', async () => {
+    const { registry } = await harness()
+    expect(registry.statusOf(WorkgroupId('g1'), 'never-sent' as never)).toBeUndefined()
+  })
+})
+
 afterEach(() => {})

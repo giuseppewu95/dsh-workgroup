@@ -20,7 +20,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent, AgentRegistry } from '@deepseek-ai/dsh-agent'
-import { createUserMessage, type ContentBlock } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, type ContentBlock, type MessageId } from '@deepseek-ai/dsh-llm'
 import type { SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionPersistence } from '@deepseek-ai/dsh-session-persistence'
 import { WorkgroupError } from './error.ts'
@@ -152,11 +152,11 @@ async function resumeOnce(
   return attempt
 }
 
-/** Deliver one authorized message to its target. */
+/** Deliver one authorized message to its target. Returns the stable message id. */
 export async function deliverWorkgroupMessage(
   ctx: Context,
   request: WorkgroupDeliveryRequest,
-): Promise<void> {
+): Promise<MessageId> {
   const target = await resolveDeliveryTarget(ctx, request)
   const source: WorkgroupMessageSource = {
     kind: 'workgroup',
@@ -177,7 +177,7 @@ export async function deliverWorkgroupMessage(
       )
     }
     try {
-      await subagents.followup(request.sender, request.targetSessionId, request.content, {
+      return await subagents.followup(request.sender, request.targetSessionId, request.content, {
         source,
         signal: request.signal,
       })
@@ -189,8 +189,8 @@ export async function deliverWorkgroupMessage(
         { cause: error },
       )
     }
-    return
   }
   const message = createUserMessage({ content: request.content, source })
   target.followup(message)
+  return message.id
 }

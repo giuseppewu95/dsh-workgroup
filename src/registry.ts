@@ -10,9 +10,14 @@
 import { randomUUID } from 'node:crypto'
 import { Context, Service } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import type { ContentBlock } from '@deepseek-ai/dsh-llm'
-import type { SessionId } from '@deepseek-ai/dsh-session'
+import type { ContentBlock, MessageId } from '@deepseek-ai/dsh-llm'
+import type { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { DomainGlobal, KvTable } from '@deepseek-ai/dsh-storage-domain'
+import {
+  foldStatus,
+  type WorkgroupMessageStatus,
+  type WorkgroupMessageStatusChange,
+} from './ack.ts'
 import { deliverWorkgroupMessage } from './delivery.ts'
 import { WorkgroupError } from './error.ts'
 import { workgroupDomainSpec, type WorkgroupDomainState, type WorkgroupRecord } from './spec.ts'
@@ -25,6 +30,8 @@ export { workgroupDomainSpec, workgroupDomainState, workgroupRecord } from './sp
 export type { WorkgroupDomainState, WorkgroupRecord } from './spec.ts'
 export type { WorkgroupMember, WorkgroupView } from './types.ts'
 export { WorkgroupId } from './types.ts'
+export { foldStatus } from './ack.ts'
+export type { WorkgroupMessageStatus, WorkgroupMessageStatusChange } from './ack.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -35,6 +42,8 @@ declare module '@deepseek-ai/cordis' {
     'workgroup/destroyed'(change: { groupId: WorkgroupId }): void
     'workgroup/member-added'(change: WorkgroupMemberChange): void
     'workgroup/member-removed'(change: WorkgroupMemberChange): void
+    /** One observed forward status transition of a delivered message. */
+    'workgroup/message-status'(change: WorkgroupMessageStatusChange): void
   }
 }
 
@@ -63,6 +72,20 @@ export interface WorkgroupSendOptions {
   readonly targetSessionId: SessionId
   readonly content: ContentBlock[]
   readonly signal: AbortSignal
+}
+
+/** Result of a successful send. */
+export interface WorkgroupSendResult {
+  readonly delivered: true
+  /** Stable message id, observable in the target session log. */
+  readonly messageId: MessageId
+}
+
+/** In-process per-message delivery status bookkeeping. */
+interface MessageStatusRecord {
+  readonly groupId: WorkgroupId
+  readonly targetSessionId: SessionId
+  status: WorkgroupMessageStatus
 }
 
 /** Event payload shared by the member-mutation events. */
@@ -103,6 +126,7 @@ export class WorkgroupRegistry extends Service {
   static inject = ['storageDomain']
 
   private readonly groups = new Map<WorkgroupId, WorkgroupRecord>()
+  private readonly messageStatus = new Map<MessageId, MessageStatusRecord>()
   private table!: KvTable<WorkgroupId, WorkgroupRecord>
   private global!: DomainGlobal<WorkgroupDomainState>
   private state!: WorkgroupDomainState
@@ -131,6 +155,14 @@ export class WorkgroupRegistry extends Service {
       this.state = { initialized: true, workgroupIds: [] }
       await this.global.set(this.state)
     }
+    // Observe target-session lifecycle events for delivered message ids. The
+    // registry shares the process with live/resumed targets (delivery resumes
+    // cold targets in-process), so queued/started/turn_completed/failed are
+    // observable here; a target later resumed in ANOTHER process is not — its
+    // status stays at the last in-process observation (documented boundary).
+    this.ctx.on('session/event', (session, event) => {
+      this.observeSessionEvent(session, event)
+    })
   }
 
   /**
@@ -331,10 +363,11 @@ export class WorkgroupRegistry extends Service {
    * resolves the target (live, cold-resumed top-level, or the sender's
    * continuable child) and appends the `workgroup`-sourced user message.
    * @param options - sender, group, target, content, and cancellation.
+   * @returns the stable message id of the delivered message.
    * @throws {WorkgroupError} on authorization or delivery failures; the
    *   message is not delivered on any rejection.
    */
-  async send(options: WorkgroupSendOptions): Promise<void> {
+  async send(options: WorkgroupSendOptions): Promise<WorkgroupSendResult> {
     if (serializedBytes(options.content) > MAX_MESSAGE_BYTES) {
       throw new WorkgroupError(
         'WORKGROUP_LIMIT_EXCEEDED',
@@ -357,12 +390,90 @@ export class WorkgroupRegistry extends Service {
         `session "${options.targetSessionId}" is not a member of workgroup "${options.groupId}"`,
       )
     }
-    await deliverWorkgroupMessage(this.ctx, {
+    const messageId = await deliverWorkgroupMessage(this.ctx, {
       sender: options.sender,
       groupId: options.groupId,
       targetSessionId: options.targetSessionId,
       content: options.content,
       signal: options.signal,
+    })
+    this.messageStatus.set(messageId, {
+      groupId: options.groupId,
+      targetSessionId: options.targetSessionId,
+      status: 'accepted',
+    })
+    this.ctx.emit('workgroup/message-status', {
+      messageId,
+      groupId: options.groupId,
+      targetSessionId: options.targetSessionId,
+      status: 'accepted',
+    })
+    return { delivered: true, messageId }
+  }
+
+  /**
+   * Query the in-process delivery status of one message.
+   * @param groupId - the workgroup the message traveled through.
+   * @param messageId - the message id returned by {@link send}.
+   * @returns the last observed status, or `undefined` when unknown in this
+   *   process (e.g. after a restart, or delivered by another process).
+   */
+  statusOf(groupId: WorkgroupId, messageId: MessageId): WorkgroupMessageStatus | undefined {
+    const record = this.messageStatus.get(messageId)
+    if (record === undefined || record.groupId !== groupId) return undefined
+    return record.status
+  }
+
+  /** Fold one target-session lifecycle event into the status map. */
+  private observeSessionEvent(session: Session, event: { type: string; data: unknown }): void {
+    if (event.type === 'agent/inbox/spliced') {
+      const splice = event.data as { target?: string; inserted?: Array<{ id?: string }> }
+      if (splice.target !== 'next-turn' || !Array.isArray(splice.inserted)) return
+      for (const message of splice.inserted) {
+        if (message.id === undefined) continue
+        this.observe(message.id as MessageId, session.id, 'queued')
+      }
+      return
+    }
+    if (event.type === 'user/message') {
+      const data = event.data as { id?: string }
+      if (data.id === undefined) return
+      this.observe(data.id as MessageId, session.id, 'started')
+      return
+    }
+    if (event.type === 'turn/end') {
+      // Close every started message of this session: the turn that CONTAINED
+      // them ended. error/aborted → failed; completed/max-tokens →
+      // turn_completed; other reasons (blocked/interrupted) leave states open.
+      const reason = (event.data as { reason?: { kind?: string } }).reason?.kind
+      if (reason !== 'completed' && reason !== 'max-tokens' && reason !== 'error' && reason !== 'aborted') return
+      const terminal: WorkgroupMessageStatus = reason === 'error' || reason === 'aborted'
+        ? 'failed'
+        : 'turn_completed'
+      for (const [messageId, record] of this.messageStatus) {
+        if (record.targetSessionId === session.id && !isTerminal(record.status)) {
+          this.transition(messageId, record, terminal)
+        }
+      }
+    }
+  }
+
+  /** Advance one record through the state machine (idempotent, forward-only). */
+  private observe(messageId: MessageId, sessionId: SessionId, observed: WorkgroupMessageStatus): void {
+    const record = this.messageStatus.get(messageId)
+    if (record === undefined || record.targetSessionId !== sessionId) return
+    this.transition(messageId, record, observed)
+  }
+
+  private transition(messageId: MessageId, record: MessageStatusRecord, observed: WorkgroupMessageStatus): void {
+    const next = foldStatus(record.status, observed)
+    if (next === null || next === record.status) return
+    record.status = next
+    this.ctx.emit('workgroup/message-status', {
+      messageId,
+      groupId: record.groupId,
+      targetSessionId: record.targetSessionId,
+      status: next,
     })
   }
 
@@ -399,6 +510,11 @@ function validateRole(role: string): void {
       `role must be a string of ${ROLE_MIN}..${ROLE_MAX} characters`,
     )
   }
+}
+
+/** Whether a delivery status may never change again. */
+function isTerminal(status: WorkgroupMessageStatus): boolean {
+  return status === 'turn_completed' || status === 'failed'
 }
 
 /** UTF-8 serialized size of one message payload (the actual storage cost). */

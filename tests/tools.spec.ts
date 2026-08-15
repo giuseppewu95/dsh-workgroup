@@ -37,7 +37,7 @@ function fakeAgent(id: string): Agent {
 }
 
 /** Registry double with recording send. */
-function registryDouble(send = vi.fn()) {
+function registryDouble(send = vi.fn(async () => ({ delivered: true, messageId: 'm1' }))) {
   const groups: WorkgroupView[] = []
   return {
     groups,
@@ -59,15 +59,17 @@ function registryDouble(send = vi.fn()) {
     removeMember: vi.fn(),
     setRole: vi.fn(),
     destroy: vi.fn(),
+    statusOf: vi.fn(() => 'started'),
     send,
   }
 }
 
 describe('workgroup tools', () => {
-  it('registers five tools and one prompt section', () => {
+  it('registers six tools and one prompt section', () => {
     const { registered, sections } = toolHarness()
     expect(registered.map(tool => tool.name).sort()).toEqual([
-      'workgroup_create', 'workgroup_destroy', 'workgroup_list', 'workgroup_members', 'workgroup_send',
+      'workgroup_create', 'workgroup_destroy', 'workgroup_list', 'workgroup_members',
+      'workgroup_send', 'workgroup_status',
     ])
     expect(sections).toEqual(['tool:workgroup'])
   })
@@ -102,15 +104,16 @@ describe('workgroup tools', () => {
 
   it('workgroup_send delivers through the registry', async () => {
     const { ctx, registered } = toolHarness()
-    const send = vi.fn(async () => {})
+    const send = vi.fn(async () => ({ delivered: true, messageId: 'm1' }))
     const registry = registryDouble(send)
     ctx.provide('workgroups', registry as never)
     const tool = registered.find(entry => entry.name === 'workgroup_send')!
     const result = await tool.execute(
       { group_id: 'g1', target_session_id: 's2', message: '去执行' },
       { agent: fakeAgent('s1'), signal: new AbortController().signal },
-    ) as { delivered: boolean }
+    ) as { delivered: boolean; message_id: string }
     expect(result.delivered).toBe(true)
+    expect(result.message_id).toBe('m1')
     expect(send).toHaveBeenCalledOnce()
     expect(send.mock.calls[0][0].sender.id).toBe(SessionId('s1'))
     expect(send.mock.calls[0][0].targetSessionId).toBe(SessionId('s2'))
@@ -206,6 +209,45 @@ describe('workgroup tools', () => {
       { agent: fakeAgent('s2'), signal: new AbortController().signal },
     )).rejects.toMatchObject({ code: 'WORKGROUP_NOT_OWNER' })
     expect(registry.destroy).not.toHaveBeenCalled()
+  })
+
+  it('workgroup_status reports the observed status', async () => {
+    const { ctx, registered } = toolHarness()
+    const registry = registryDouble()
+    await registry.create({ title: 'g', owner: 's1' })
+    ctx.provide('workgroups', registry as never)
+    const tool = registered.find(entry => entry.name === 'workgroup_status')!
+    const status = await tool.execute(
+      { group_id: 'g1', message_id: 'm1' },
+      { agent: fakeAgent('s1'), signal: new AbortController().signal },
+    ) as string
+    expect(status).toBe('started')
+  })
+
+  it('workgroup_status reports unknown when no record exists', async () => {
+    const { ctx, registered } = toolHarness()
+    const registry = registryDouble()
+    await registry.create({ title: 'g', owner: 's1' })
+    ;(registry.statusOf as ReturnType<typeof vi.fn>).mockReturnValue(undefined)
+    ctx.provide('workgroups', registry as never)
+    const tool = registered.find(entry => entry.name === 'workgroup_status')!
+    const status = await tool.execute(
+      { group_id: 'g1', message_id: 'ghost' },
+      { agent: fakeAgent('s1'), signal: new AbortController().signal },
+    ) as string
+    expect(status).toBe('unknown')
+  })
+
+  it('workgroup_status rejects a caller outside the group', async () => {
+    const { ctx, registered } = toolHarness()
+    const registry = registryDouble()
+    await registry.create({ title: 'g', owner: 's1' })
+    ctx.provide('workgroups', registry as never)
+    const tool = registered.find(entry => entry.name === 'workgroup_status')!
+    await expect(tool.execute(
+      { group_id: 'g1', message_id: 'm1' },
+      { agent: fakeAgent('outsider'), signal: new AbortController().signal },
+    )).rejects.toMatchObject({ code: 'WORKGROUP_NOT_MEMBER' })
   })
 
   it('rejects agentless execution', async () => {

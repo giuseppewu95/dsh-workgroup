@@ -15,7 +15,7 @@ A workgroup lets you run a real collaboration loop across sessions — one sessi
 | Piece | Description |
 |---|---|
 | `ctx.workgroups` | Host service: durable registry (via `storage-domain`), member management, and authorized cross-session delivery |
-| `workgroup_create` / `workgroup_list` / `workgroup_send` / `workgroup_members` / `workgroup_destroy` | Model tools: form groups, assign roles (规划/执行/测试…), send messages to member sessions, dissolve a group you own |
+| `workgroup_create` / `workgroup_list` / `workgroup_send` / `workgroup_members` / `workgroup_destroy` / `workgroup_status` | Model tools: form groups, assign roles (规划/执行/测试…), send messages to member sessions, dissolve a group you own, query a delivered message's observed status |
 | Browser panel | A button in the session header listing the current session's groups and members with roles and status; click a member to open that session |
 | `workgroup` message source | Messages delivered to a target session are logged as `user/message` with `source.kind: 'workgroup'` — model-visible, reconstructable from the log |
 
@@ -119,6 +119,7 @@ AGENTS.md            # fresh-session onboarding: layout, commands, design facts
 - Groups may span workspaces (messaging does not check `cwd`); member transcripts are read by opening the session in the GUI or by asking the member to report back through the group.
 - Destroying a group removes only the group record; already-delivered messages stay in member session logs (they are immutable).
 - The `/workgroup` HTTP API carries the same confused-deputy fence as the harness `/api` surface (loopback Host plus same-origin browser markers, mirrored locally because the harness does not export its fence). It is not an authentication layer; reachability still follows the webserver bind policy.
+- Delivery status (`workgroup_send` message_id + `workgroup_status`) is observed in-process from the target session's durable lifecycle events: `accepted → queued → started → turn_completed | failed`. `turn_completed` means the turn *containing* the message ended — not a per-message consumption proof. A target processed in another process (or after a restart) leaves the status at the last in-process observation (`unknown`).
 - Built artifacts (`lib/`) are committed to the repository so git-based installs work without a build step. Rebuild before publishing with `npm run build`.
 
 ## License

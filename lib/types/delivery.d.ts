@@ -19,7 +19,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis';
 import type { Agent } from '@deepseek-ai/dsh-agent';
-import { type ContentBlock } from '@deepseek-ai/dsh-llm';
+import { type ContentBlock, type MessageId } from '@deepseek-ai/dsh-llm';
 import type { SessionId } from '@deepseek-ai/dsh-session';
 import type { WorkgroupMessageSource } from './message-source.ts';
 /** Delivery inputs the caller has already authorized. */
@@ -37,5 +37,5 @@ export interface WorkgroupDeliveryRequest {
 }
 /** Resolve the target to a live Agent or reject with a typed error. */
 export declare function resolveDeliveryTarget(ctx: Context, request: WorkgroupDeliveryRequest): Promise<Agent>;
-/** Deliver one authorized message to its target. */
-export declare function deliverWorkgroupMessage(ctx: Context, request: WorkgroupDeliveryRequest): Promise<void>;
+/** Deliver one authorized message to its target. Returns the stable message id. */
+export declare function deliverWorkgroupMessage(ctx: Context, request: WorkgroupDeliveryRequest): Promise<MessageId>;

@@ -245,6 +245,15 @@ try {
     `got ${testWorkgroup.length}`)
   check('produced artifact fib.py', result.fib_exists === true)
 
+  // Delivery-status state machine observed in the real run: at least one
+  // message must reach turn_completed (a member processed it in-process).
+  const statuses = result.message_statuses ?? []
+  const finalStates = new Map()
+  for (const entry of statuses) finalStates.set(entry.target, entry.status)
+  const completedTargets = [...finalStates.values()].filter((s) => s === 'turn_completed').length
+  check('ack: at least one message reached turn_completed', completedTargets >= 1,
+    `states=${JSON.stringify(statuses.map((s) => `${s.target}:${s.status}`))}`)
+
   if (failures.length > 0) fail(`assertions failed: ${failures.join(', ')}`)
   console.log('E2E_PASS all assertions')
 } finally {
