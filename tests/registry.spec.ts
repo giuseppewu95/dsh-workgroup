@@ -5,7 +5,7 @@
  * @module dsh-workgroup/tests/registry
  */
 
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
@@ -38,8 +38,6 @@ interface Harness {
   /** Register a live agent under an id. */
   addAgent: (agent: Agent) => void
 }
-
-import { vi } from 'vitest'
 
 async function harness(pool = new Map()): Promise<Harness> {
   const ctx = new Context()
@@ -128,6 +126,68 @@ describe('member mutations', () => {
       .rejects.toMatchObject({ code: 'WORKGROUP_NOT_FOUND' })
     await expect(registry.destroy(WorkgroupId('nope')))
       .rejects.toMatchObject({ code: 'WORKGROUP_NOT_FOUND' })
+  })
+
+  it('drops an explicit owner entry on create (no duplicate member)', async () => {
+    const { registry } = await harness()
+    const group = await registry.create({
+      title: 'g',
+      owner: SessionId('s1'),
+      members: [{ sessionId: SessionId('s1'), role: '规划' }],
+    })
+    expect(group.members).toHaveLength(1)
+    expect(group.members[0].role).toBe('owner')
+  })
+})
+
+describe('input validation', () => {
+  it('rejects an out-of-bounds role on create', async () => {
+    const { registry } = await harness()
+    await expect(registry.create({
+      title: 'g',
+      owner: SessionId('s1'),
+      members: [{ sessionId: SessionId('s2'), role: 'x'.repeat(65) }],
+    })).rejects.toMatchObject({ code: 'WORKGROUP_INVALID_INPUT' })
+  })
+
+  it('rejects an out-of-bounds role on addMember and setRole', async () => {
+    const { registry } = await harness()
+    const group = await registry.create({ title: 'g', owner: SessionId('s1') })
+    await expect(registry.addMember({ groupId: group.id, sessionId: SessionId('s2'), role: '' }))
+      .rejects.toMatchObject({ code: 'WORKGROUP_INVALID_INPUT' })
+    await registry.addMember({ groupId: group.id, sessionId: SessionId('s2'), role: '执行' })
+    await expect(registry.setRole(group.id, SessionId('s2'), 'x'.repeat(65)))
+      .rejects.toMatchObject({ code: 'WORKGROUP_INVALID_INPUT' })
+  })
+
+  it('rejects an out-of-bounds title on create', async () => {
+    const { registry } = await harness()
+    await expect(registry.create({ title: '', owner: SessionId('s1') }))
+      .rejects.toMatchObject({ code: 'WORKGROUP_INVALID_INPUT' })
+    await expect(registry.create({ title: 'x'.repeat(201), owner: SessionId('s1') }))
+      .rejects.toMatchObject({ code: 'WORKGROUP_INVALID_INPUT' })
+  })
+
+  it('serializes concurrent member mutations without lost updates', async () => {
+    const { registry } = await harness()
+    const group = await registry.create({ title: 'g', owner: SessionId('s1') })
+    // Ten concurrent adds: every one must land despite read-modify-write races.
+    await Promise.all(Array.from({ length: 10 }, (_, index) => (
+      registry.addMember({ groupId: group.id, sessionId: SessionId(`s${index + 2}`), role: `r${index}` })
+    )))
+    expect(registry.get(group.id)?.members).toHaveLength(11)
+  })
+})
+
+describe('member events', () => {
+  it('carries the removed member role in member-removed', async () => {
+    const { ctx, registry } = await harness()
+    const seen: Array<{ sessionId: SessionId; role: string }> = []
+    ctx.on('workgroup/member-removed', (change) => { seen.push(change) })
+    const group = await registry.create({ title: 'g', owner: SessionId('s1') })
+    await registry.addMember({ groupId: group.id, sessionId: SessionId('s2'), role: '执行' })
+    await registry.removeMember(group.id, SessionId('s2'))
+    expect(seen).toEqual([{ groupId: group.id, sessionId: SessionId('s2'), role: '执行' }])
   })
 })
 
@@ -274,6 +334,24 @@ describe('send authorization matrix', () => {
     })
     expect(resume).toHaveBeenCalledOnce()
     expect(followups).toHaveLength(1)
+  })
+
+  it('maps a cold resume failure to a typed delivery error', async () => {
+    const { ctx, registry, resume } = await harness()
+    resume.mockRejectedValue(new Error('boom'))
+    ctx.provide('sessionPersistence', {
+      list: async () => [{ version: 0, id: SessionId('cold1'), createdAt: 0 }],
+    } as never)
+    const sender = fakeAgent('s1')
+    const group = await registry.create({ title: 'g', owner: SessionId('s1') })
+    await registry.addMember({ groupId: group.id, sessionId: SessionId('cold1'), role: '执行' })
+    await expect(registry.send({
+      sender,
+      groupId: group.id,
+      targetSessionId: SessionId('cold1'),
+      content: [{ type: 'text', text: 'x' }],
+      signal,
+    })).rejects.toMatchObject({ code: 'WORKGROUP_TARGET_UNAVAILABLE' })
   })
 
   it('rejects an unknown cold target', async () => {

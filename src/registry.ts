@@ -72,10 +72,19 @@ export interface WorkgroupMemberChange {
   readonly role: string
 }
 
+/** Role label length bounds, mirroring the durable schema. */
+const ROLE_MIN = 1
+const ROLE_MAX = 64
+/** Title length bounds, mirroring the durable schema. */
+const TITLE_MIN = 1
+const TITLE_MAX = 200
+
 /**
  * Durable workgroup registry. All mutations funnel through the domain write
  * chain (durability first, then memory, then `domain/changed`); reads are
- * synchronous from the in-memory record cache.
+ * synchronous from the in-memory record cache. Every read-modify-write
+ * operation is serialized on one operation chain so concurrent callers
+ * cannot interleave and lose updates.
  */
 export class WorkgroupRegistry extends Service {
   static inject = ['storageDomain']
@@ -84,9 +93,17 @@ export class WorkgroupRegistry extends Service {
   private table!: KvTable<WorkgroupId, WorkgroupRecord>
   private global!: DomainGlobal<WorkgroupDomainState>
   private state!: WorkgroupDomainState
+  private operationTail: Promise<unknown> = Promise.resolve()
 
   constructor(ctx: Context) {
     super(ctx, 'workgroups')
+  }
+
+  /** Serialize one read-modify-write operation behind all earlier ones. */
+  private enqueueOperation<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.operationTail.then(operation, operation)
+    this.operationTail = result.then(() => undefined, () => undefined)
+    return result
   }
 
   /** Open the domain, load records, and rebuild the cache. */
@@ -107,28 +124,37 @@ export class WorkgroupRegistry extends Service {
    * Create a workgroup. The owner session becomes the first member.
    * @param options - title, owner, and optional initial members.
    * @returns the created view.
+   * @throws {WorkgroupError} when the title or any role violates its bounds.
    */
   async create(options: WorkgroupCreateOptions): Promise<WorkgroupView> {
-    const id = WorkgroupId(randomUUID())
-    const now = new Date().toISOString()
-    const members = [
-      { sessionId: options.owner, role: 'owner', joinedAt: now },
-      ...(options.members ?? []).map(member => ({ ...member, joinedAt: now })),
-    ]
-    const record: WorkgroupRecord = {
-      id,
-      title: options.title,
-      ownerSessionId: options.owner,
-      createdAt: now,
-      updatedAt: now,
-      members,
-    }
-    await this.table.put(id, record)
-    this.groups.set(id, record)
-    this.state = { ...this.state, workgroupIds: [...this.state.workgroupIds, id] }
-    await this.global.set(this.state)
-    this.ctx.emit('workgroup/created', { groupId: id })
-    return this.viewOf(record)
+    return this.enqueueOperation(async () => {
+      validateTitle(options.title)
+      for (const member of options.members ?? []) validateRole(member.role)
+      const id = WorkgroupId(randomUUID())
+      const now = new Date().toISOString()
+      const members = [
+        { sessionId: options.owner, role: 'owner', joinedAt: now },
+        // The owner is already a member; any explicit entry naming it is a
+        // duplicate and is dropped rather than persisted.
+        ...(options.members ?? [])
+          .filter(member => member.sessionId !== options.owner)
+          .map(member => ({ ...member, joinedAt: now })),
+      ]
+      const record: WorkgroupRecord = {
+        id,
+        title: options.title,
+        ownerSessionId: options.owner,
+        createdAt: now,
+        updatedAt: now,
+        members,
+      }
+      await this.table.put(id, record)
+      this.groups.set(id, record)
+      this.state = { ...this.state, workgroupIds: [...this.state.workgroupIds, id] }
+      await this.global.set(this.state)
+      this.ctx.emit('workgroup/created', { groupId: id })
+      return this.viewOf(record)
+    })
   }
 
   /**
@@ -164,31 +190,35 @@ export class WorkgroupRegistry extends Service {
   /**
    * Add a member to a workgroup.
    * @param options - group, session, and role.
-   * @throws {WorkgroupError} when the group is unknown or the member already exists.
+   * @throws {WorkgroupError} when the group is unknown, the member already
+   *   exists, or the role violates its bounds.
    */
   async addMember(options: WorkgroupAddMemberOptions): Promise<WorkgroupView> {
-    const record = this.require(options.groupId)
-    if (record.members.some(member => member.sessionId === options.sessionId)) {
-      throw new WorkgroupError(
-        'WORKGROUP_MEMBER_EXISTS',
-        `session "${options.sessionId}" is already a member of workgroup "${options.groupId}"`,
-      )
-    }
-    const next: WorkgroupRecord = {
-      ...record,
-      updatedAt: new Date().toISOString(),
-      members: [
-        ...record.members,
-        { sessionId: options.sessionId, role: options.role, joinedAt: new Date().toISOString() },
-      ],
-    }
-    await this.updateRecord(next)
-    this.ctx.emit('workgroup/member-added', {
-      groupId: options.groupId,
-      sessionId: options.sessionId,
-      role: options.role,
+    return this.enqueueOperation(async () => {
+      validateRole(options.role)
+      const record = this.require(options.groupId)
+      if (record.members.some(member => member.sessionId === options.sessionId)) {
+        throw new WorkgroupError(
+          'WORKGROUP_MEMBER_EXISTS',
+          `session "${options.sessionId}" is already a member of workgroup "${options.groupId}"`,
+        )
+      }
+      const next: WorkgroupRecord = {
+        ...record,
+        updatedAt: new Date().toISOString(),
+        members: [
+          ...record.members,
+          { sessionId: options.sessionId, role: options.role, joinedAt: new Date().toISOString() },
+        ],
+      }
+      await this.updateRecord(next)
+      this.ctx.emit('workgroup/member-added', {
+        groupId: options.groupId,
+        sessionId: options.sessionId,
+        role: options.role,
+      })
+      return this.viewOf(next)
     })
-    return this.viewOf(next)
   }
 
   /**
@@ -198,21 +228,24 @@ export class WorkgroupRegistry extends Service {
    * @throws {WorkgroupError} on unknown group, missing member, or owner removal.
    */
   async removeMember(groupId: WorkgroupId, sessionId: SessionId): Promise<WorkgroupView> {
-    const record = this.require(groupId)
-    if (sessionId === record.ownerSessionId) {
-      throw new WorkgroupError('WORKGROUP_OWNER_REMOVAL', 'the owner session cannot be removed from its workgroup')
-    }
-    if (!record.members.some(member => member.sessionId === sessionId)) {
-      throw new WorkgroupError('WORKGROUP_MEMBER_MISSING', `session "${sessionId}" is not a member`)
-    }
-    const next: WorkgroupRecord = {
-      ...record,
-      updatedAt: new Date().toISOString(),
-      members: record.members.filter(member => member.sessionId !== sessionId),
-    }
-    await this.updateRecord(next)
-    this.ctx.emit('workgroup/member-removed', { groupId, sessionId, role: '' })
-    return this.viewOf(next)
+    return this.enqueueOperation(async () => {
+      const record = this.require(groupId)
+      if (sessionId === record.ownerSessionId) {
+        throw new WorkgroupError('WORKGROUP_OWNER_REMOVAL', 'the owner session cannot be removed from its workgroup')
+      }
+      const removed = record.members.find(member => member.sessionId === sessionId)
+      if (removed === undefined) {
+        throw new WorkgroupError('WORKGROUP_MEMBER_MISSING', `session "${sessionId}" is not a member`)
+      }
+      const next: WorkgroupRecord = {
+        ...record,
+        updatedAt: new Date().toISOString(),
+        members: record.members.filter(member => member.sessionId !== sessionId),
+      }
+      await this.updateRecord(next)
+      this.ctx.emit('workgroup/member-removed', { groupId, sessionId, role: removed.role })
+      return this.viewOf(next)
+    })
   }
 
   /**
@@ -220,20 +253,23 @@ export class WorkgroupRegistry extends Service {
    * @param groupId - the workgroup id.
    * @param sessionId - the member session id.
    * @param role - the new role label (1..64 chars).
-   * @throws {WorkgroupError} on unknown group or missing member.
+   * @throws {WorkgroupError} on unknown group, missing member, or an out-of-bounds role.
    */
   async setRole(groupId: WorkgroupId, sessionId: SessionId, role: string): Promise<WorkgroupView> {
-    const record = this.require(groupId)
-    if (!record.members.some(member => member.sessionId === sessionId)) {
-      throw new WorkgroupError('WORKGROUP_MEMBER_MISSING', `session "${sessionId}" is not a member`)
-    }
-    const next: WorkgroupRecord = {
-      ...record,
-      updatedAt: new Date().toISOString(),
-      members: record.members.map(member => member.sessionId === sessionId ? { ...member, role } : member),
-    }
-    await this.updateRecord(next)
-    return this.viewOf(next)
+    return this.enqueueOperation(async () => {
+      validateRole(role)
+      const record = this.require(groupId)
+      if (!record.members.some(member => member.sessionId === sessionId)) {
+        throw new WorkgroupError('WORKGROUP_MEMBER_MISSING', `session "${sessionId}" is not a member`)
+      }
+      const next: WorkgroupRecord = {
+        ...record,
+        updatedAt: new Date().toISOString(),
+        members: record.members.map(member => member.sessionId === sessionId ? { ...member, role } : member),
+      }
+      await this.updateRecord(next)
+      return this.viewOf(next)
+    })
   }
 
   /**
@@ -243,12 +279,14 @@ export class WorkgroupRegistry extends Service {
    * @throws {WorkgroupError} when the group is unknown.
    */
   async destroy(groupId: WorkgroupId): Promise<void> {
-    this.require(groupId)
-    await this.table.delete(groupId)
-    this.groups.delete(groupId)
-    this.state = { ...this.state, workgroupIds: this.state.workgroupIds.filter(id => id !== groupId) }
-    await this.global.set(this.state)
-    this.ctx.emit('workgroup/destroyed', { groupId })
+    return this.enqueueOperation(async () => {
+      this.require(groupId)
+      await this.table.delete(groupId)
+      this.groups.delete(groupId)
+      this.state = { ...this.state, workgroupIds: this.state.workgroupIds.filter(id => id !== groupId) }
+      await this.global.set(this.state)
+      this.ctx.emit('workgroup/destroyed', { groupId })
+    })
   }
 
   /**
@@ -309,5 +347,25 @@ export class WorkgroupRegistry extends Service {
       updatedAt: record.updatedAt,
       members: record.members,
     }
+  }
+}
+
+/** Validate one role label against the durable schema bounds. */
+function validateRole(role: string): void {
+  if (typeof role !== 'string' || role.length < ROLE_MIN || role.length > ROLE_MAX) {
+    throw new WorkgroupError(
+      'WORKGROUP_INVALID_INPUT',
+      `role must be a string of ${ROLE_MIN}..${ROLE_MAX} characters`,
+    )
+  }
+}
+
+/** Validate one title against the durable schema bounds. */
+function validateTitle(title: string): void {
+  if (typeof title !== 'string' || title.length < TITLE_MIN || title.length > TITLE_MAX) {
+    throw new WorkgroupError(
+      'WORKGROUP_INVALID_INPUT',
+      `title must be a string of ${TITLE_MIN}..${TITLE_MAX} characters`,
+    )
   }
 }

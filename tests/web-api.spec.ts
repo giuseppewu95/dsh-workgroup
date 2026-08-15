@@ -43,7 +43,7 @@ function fakeRes() {
 
 /** Build one fake request. */
 function fakeReq(path: string): IncomingMessage {
-  return { url: path, method: 'GET' } as unknown as IncomingMessage
+  return { url: path, method: 'GET', headers: { host: '127.0.0.1:3080' } } as unknown as IncomingMessage
 }
 
 /** Boot a context with a scripted webServer capturing the registered handler. */
@@ -94,6 +94,26 @@ describe('/workgroup/list', () => {
     const { res, state } = fakeRes()
     await handlers[0](fakeReq('/workgroup/other'), res)
     expect(state.status).toBe(404)
+  })
+
+  it('403s an untrusted host before reading any data', async () => {
+    const { handlers } = await boot()
+    const { res, state } = fakeRes()
+    const req = { url: '/workgroup/list?sessionId=s1', method: 'GET', headers: { host: 'evil.example' } }
+    await handlers[0](req as never, res)
+    expect(state.status).toBe(403)
+  })
+
+  it('403s a cross-site browser marker', async () => {
+    const { handlers } = await boot()
+    const { res, state } = fakeRes()
+    const req = {
+      url: '/workgroup/list?sessionId=s1',
+      method: 'GET',
+      headers: { host: '127.0.0.1:3080', 'sec-fetch-site': 'cross-site' },
+    }
+    await handlers[0](req as never, res)
+    expect(state.status).toBe(403)
   })
 
   it('does not register when no web server is mounted', () => {

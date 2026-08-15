@@ -12,8 +12,14 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { WorkgroupError } from './error.ts'
 import { WorkgroupId } from './types.ts'
+import type {} from './registry.ts'
 
-/** Tool registry and prompt assembly services. */
+/**
+ * Services the tool registration needs. `workgroups` is resolved through the
+ * inject face at registration time (see `apply` in src/index.ts), never as a
+ * plugin-row dependency: the registry is mounted by the same plugin, so a
+ * row-level inject would deadlock on its own apply.
+ */
 export const inject = ['tools', 'systemPrompt']
 
 /** Guidance text for the model, registered as a system-prompt section. */

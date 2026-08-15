@@ -57,7 +57,7 @@ describe('dsh-workgroup composition', () => {
 
     // Mount at root exactly as the Loader mounts the entry.
     await ctx.plugin(WorkgroupRegistry)
-    const toolsFiber = ctx.inject(['tools', 'systemPrompt'], (toolsCtx) => {
+    const toolsFiber = ctx.inject(['tools', 'systemPrompt', 'workgroups'], (toolsCtx) => {
       applyTools(toolsCtx)
     })
     await toolsFiber

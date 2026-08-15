@@ -58,8 +58,17 @@ export function apply(ctx: ClientContext): void {
       const sessions = ctx.get('sessions') as ISessions | undefined
       if (sessions === undefined) return
       const addressed = sessions.subagentAddress(sessionId)
-      if (addressed !== undefined) sessions.openSubagent(addressed)
-      else sessions.open(sessionId)
+      if (addressed !== undefined) {
+        sessions.openSubagent(addressed)
+        return
+      }
+      try {
+        sessions.open(sessionId)
+      } catch {
+        // A member whose session is no longer listed (archived or deleted)
+        // cannot be opened; the panel keeps showing it so the user can see
+        // the membership, and the click is a silent no-op.
+      }
     },
   })
 

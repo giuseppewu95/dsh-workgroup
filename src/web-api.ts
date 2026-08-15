@@ -12,6 +12,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type { WorkgroupRegistry } from './registry.ts'
+import { isTrustedWorkgroupRequest } from './trust.ts'
 
 /** Wire view of one member (plain JSON, no branded types). */
 export interface WorkgroupMemberWire {
@@ -54,6 +55,13 @@ function handleWorkgroupRequest(
   res: ServerResponse,
 ): void {
   try {
+    // Same confused-deputy fence the harness applies to /api: loopback Host
+    // plus same-origin browser markers. Anything else gets 403 before any
+    // membership data is read.
+    if (!isTrustedWorkgroupRequest(req.headers)) {
+      sendJson(res, 403, { error: 'untrusted request' })
+      return
+    }
     const url = new URL(req.url ?? '/', 'http://localhost')
     if (url.pathname === '/workgroup/list' && (req.method === 'GET' || req.method === 'HEAD')) {
       const sessionId = url.searchParams.get('sessionId')
@@ -73,7 +81,7 @@ function handleWorkgroupRequest(
           })),
         })),
       }
-      sendJson(res, 200, payload)
+      sendJson(res, 200, payload, req.method === 'HEAD')
       return
     }
     sendJson(res, 404, { error: `unknown workgroup route ${url.pathname}` })
@@ -83,13 +91,13 @@ function handleWorkgroupRequest(
   }
 }
 
-/** Write one JSON response. */
-function sendJson(res: ServerResponse, status: number, payload: unknown): void {
+/** Write one JSON response; HEAD sends headers only. */
+function sendJson(res: ServerResponse, status: number, payload: unknown, headOnly = false): void {
   const body = JSON.stringify(payload)
   res.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
     'content-length': Buffer.byteLength(body),
     'cache-control': 'no-store',
   })
-  res.end(body)
+  res.end(headOnly ? undefined : body)
 }

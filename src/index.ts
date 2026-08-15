@@ -30,10 +30,12 @@ export const inject = ['storageDomain', ...toolsInject]
  */
 export async function apply(ctx: Context): Promise<void> {
   await ctx.plugin(WorkgroupRegistry)
-  const registry = ctx.get('workgroups') as WorkgroupRegistry | undefined
-  ctx.inject(['tools', 'systemPrompt'], (toolsCtx) => {
+  // Tools resolve the registry through this inject face (never a row-level
+  // dependency, which would deadlock on the plugin's own apply above).
+  ctx.inject(['tools', 'systemPrompt', 'workgroups'], (toolsCtx) => {
     applyTools(toolsCtx)
   })
+  const registry = ctx.get('workgroups') as WorkgroupRegistry | undefined
   if (registry !== undefined) {
     const dispose = registerWorkgroupApi(ctx, registry)
     if (dispose !== undefined) {

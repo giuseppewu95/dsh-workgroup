@@ -100,6 +100,8 @@ tests/               # vitest（spec/registry/tools/web-api/panel/composition）
 - 成员权限平等；`ownerSessionId` 仅作记录（owner 不可被移除，但无额外权限）。
 - 群可跨 workspace（消息投递不校验 `cwd`）；读取成员日志仍受 `session_trace` / `session_event_read` 的 workspace 授权约束。
 - 销毁群只删除群记录；已投递消息保留在成员会话日志中（日志不可变）。
+- `/workgroup` HTTP API 采用与 harness `/api` 相同的 confused-deputy 防护（回环 Host + 同源浏览器标记；因 harness 未导出其围栏，插件本地镜像同一规则）。这不是认证层；可达性仍由 webserver 绑定策略决定。
+- 构建产物（`lib/`）已提交到仓库，git 安装无需构建步骤；发布前请重新 `npm run build`。
 
 ## License
 

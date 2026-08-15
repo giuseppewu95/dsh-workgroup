@@ -100,6 +100,8 @@ tests/               # vitest suites (spec/registry/tools/web-api/panel/composit
 - Members are equal; `ownerSessionId` is descriptive only (the owner cannot be removed, but has no extra authority).
 - Groups may span workspaces (messaging does not check `cwd`); reading a member's log is still governed by the workspace authorization of `session_trace` / `session_event_read`.
 - Destroying a group removes only the group record; already-delivered messages stay in member session logs (they are immutable).
+- The `/workgroup` HTTP API carries the same confused-deputy fence as the harness `/api` surface (loopback Host plus same-origin browser markers, mirrored locally because the harness does not export its fence). It is not an authentication layer; reachability still follows the webserver bind policy.
+- Built artifacts (`lib/`) are committed to the repository so git-based installs work without a build step. Rebuild before publishing with `npm run build`.
 
 ## License
 

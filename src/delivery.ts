@@ -116,6 +116,15 @@ async function resumeOnce(ctx: Context, sessionId: SessionId): Promise<Agent> {
           },
       })
       return handle.agent
+    } catch (error) {
+      // Resume failures surface as one typed delivery failure: the caller
+      // cannot act on registry internals, and the id stays resumable for a
+      // later attempt (the finally below frees the dedupe slot).
+      throw new WorkgroupError(
+        'WORKGROUP_TARGET_UNAVAILABLE',
+        `workgroup target "${sessionId}" could not be resumed`,
+        { cause: error },
+      )
     } finally {
       resumes.delete(sessionId)
     }
@@ -138,7 +147,9 @@ export async function deliverWorkgroupMessage(
   }
   if (target.session.header.origin === 'subagent') {
     // The continuation manager owns the child's inbox and cold resume; the
-    // sender is its durable direct parent (checked above).
+    // sender is its durable direct parent (checked above). A one-shot child
+    // has no Activation and its descriptor rejects resume, so the manager's
+    // NOT_RESUMABLE failure is mapped to the typed delivery error.
     const subagents = ctx.get('subagents')
     if (subagents === undefined) {
       throw new WorkgroupError(
@@ -146,10 +157,19 @@ export async function deliverWorkgroupMessage(
         'workgroup delivery to a subagent child requires the subagents service, which is not mounted',
       )
     }
-    await subagents.followup(request.sender, request.targetSessionId, request.content, {
-      source,
-      signal: request.signal,
-    })
+    try {
+      await subagents.followup(request.sender, request.targetSessionId, request.content, {
+        source,
+        signal: request.signal,
+      })
+    } catch (error) {
+      request.signal.throwIfAborted()
+      throw new WorkgroupError(
+        'WORKGROUP_TARGET_UNAVAILABLE',
+        `workgroup target "${request.targetSessionId}" is not a resumable continuable child`,
+        { cause: error },
+      )
+    }
     return
   }
   const message = createUserMessage({ content: request.content, source })

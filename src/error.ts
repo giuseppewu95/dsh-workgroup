@@ -17,6 +17,7 @@ export type WorkgroupErrorCode =
   | 'WORKGROUP_MEMBER_EXISTS'
   | 'WORKGROUP_MEMBER_MISSING'
   | 'WORKGROUP_OWNER_REMOVAL'
+  | 'WORKGROUP_INVALID_INPUT'
   | 'WORKGROUP_UNKNOWN'
 
 /** One typed workgroup failure. */
@@ -24,12 +25,14 @@ export class WorkgroupError extends Error {
   /**
    * @param code - stable machine-readable code.
    * @param message - human-readable explanation.
+   * @param options - optional cause for the underlying failure.
    */
   constructor(
     readonly code: WorkgroupErrorCode,
     message: string,
+    options?: { readonly cause?: unknown },
   ) {
-    super(message)
+    super(message, options)
     this.name = 'WorkgroupError'
   }
 }
