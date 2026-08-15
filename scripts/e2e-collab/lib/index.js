@@ -15,6 +15,7 @@ import { readFileSync, existsSync } from 'node:fs'
 import { installModelSelection } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
+import { spawnWorkgroupSession, WorkgroupId } from 'dsh-workgroup'
 
 export const name = 'e2e-collab-runner'
 export const inject = ['agentDefaultModel', 'agents', 'sessions']
@@ -130,6 +131,31 @@ async function run(ctx, io, statuses) {
 
   for (const agent of roster) await sessions.flush(agent.session)
 
+  // Guided spawn verification: create a fresh collaborator session with a role
+  // background through the REAL agents registry, add it to the group, and
+  // confirm it is live and a member.
+  let spawn = null
+  try {
+    const group = storageGroups().find((g) => g.title === 'e2e-collab')
+    if (group !== undefined) {
+      const spawned = await spawnWorkgroupSession(ctx, {
+        sender: coord,
+        groupId: WorkgroupId(group.id),
+        role: '记录员',
+        background: '你是协作记录员，负责总结群内讨论与决策。',
+      })
+      const registry = ctx.get('workgroups')
+      const view = registry?.get(WorkgroupId(group.id))
+      spawn = {
+        sessionId: String(spawned.sessionId),
+        memberOfGroup: view?.members.some((m) => String(m.sessionId) === String(spawned.sessionId)) ?? false,
+        live: ctx.get('agents')?.get(spawned.sessionId) !== undefined,
+      }
+    }
+  } catch (error) {
+    spawn = { error: error instanceof Error ? error.message : String(error) }
+  }
+
   const report = {
     coord: coord.id,
     exec: exec.id,
@@ -141,6 +167,7 @@ async function run(ctx, io, statuses) {
     fib_exists: existsSync(`${process.cwd()}/fib.py`),
     timeout: Date.now() - startedAt >= MAX_MS,
     message_statuses: statuses,
+    spawn,
   }
   io.stdout.write('E2E_COLLAB_RESULT ' + JSON.stringify(report) + '\n')
   io.exit(0)

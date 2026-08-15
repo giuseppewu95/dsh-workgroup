@@ -65,11 +65,11 @@ function registryDouble(send = vi.fn(async () => ({ delivered: true, messageId: 
 }
 
 describe('workgroup tools', () => {
-  it('registers six tools and one prompt section', () => {
+  it('registers seven tools and one prompt section', () => {
     const { registered, sections } = toolHarness()
     expect(registered.map(tool => tool.name).sort()).toEqual([
       'workgroup_create', 'workgroup_destroy', 'workgroup_list', 'workgroup_members',
-      'workgroup_send', 'workgroup_status',
+      'workgroup_send', 'workgroup_spawn', 'workgroup_status',
     ])
     expect(sections).toEqual(['tool:workgroup'])
   })

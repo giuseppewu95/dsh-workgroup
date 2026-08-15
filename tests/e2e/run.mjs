@@ -238,7 +238,8 @@ try {
   check('group e2e-collab created', group !== undefined)
   if (group !== undefined) {
     const roles = Object.fromEntries(group.members.map((m) => [m.sessionId, m.role]))
-    check('three members', group.members.length === 3)
+    // The original trio plus the spawned recorder (asserted separately).
+    check('at least the original three members', group.members.length >= 3)
     check('owner is coordinator', roles[result.coord] === 'owner')
     check('executor role', roles[result.exec] === '执行')
     check('tester role', roles[result.test] === '测试')
@@ -267,6 +268,13 @@ try {
   const completedTargets = [...finalStates.values()].filter((s) => s === 'turn_completed').length
   check('ack: at least one message reached turn_completed', completedTargets >= 1,
     `states=${JSON.stringify(statuses.map((s) => `${s.target}:${s.status}`))}`)
+
+  // Guided spawn: a fresh session was created, added to the group, and is live.
+  const spawnOutcome = result.spawn ?? {}
+  check('spawn: session created and added to group', spawnOutcome.memberOfGroup === true,
+    JSON.stringify(spawnOutcome))
+  check('spawn: new session is live in the agents registry', spawnOutcome.live === true,
+    JSON.stringify(spawnOutcome))
 
   if (failures.length > 0) fail(`assertions failed: ${failures.join(', ')}`)
   console.log('E2E_PASS all assertions')

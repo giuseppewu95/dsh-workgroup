@@ -66,7 +66,7 @@ describe('dsh-workgroup composition', () => {
     expect(workgroups).toBeDefined()
     expect(registered.map(tool => tool.name).sort()).toEqual([
       'workgroup_create', 'workgroup_destroy', 'workgroup_list', 'workgroup_members',
-      'workgroup_send', 'workgroup_status',
+      'workgroup_send', 'workgroup_spawn', 'workgroup_status',
     ])
 
     // Drive the full flow through the service.

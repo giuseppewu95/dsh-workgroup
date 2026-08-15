@@ -18,8 +18,10 @@ export type { WorkgroupMember, WorkgroupView } from './types.ts'
 export { WorkgroupId } from './types.ts'
 export { WorkgroupRegistry } from './registry.ts'
 export type {
-  WorkgroupAddMemberOptions, WorkgroupCreateOptions, WorkgroupSendOptions,
+  WorkgroupAddMemberOptions, WorkgroupCreateOptions, WorkgroupSendOptions, WorkgroupSendResult,
 } from './registry.ts'
+export { spawnWorkgroupSession } from './spawn.ts'
+export type { WorkgroupSpawnOptions, WorkgroupSpawnResult } from './spawn.ts'
 
 export const name = 'dsh-workgroup'
 export const inject = ['storageDomain', ...toolsInject]

@@ -12,6 +12,7 @@ import type { MessageId } from '@deepseek-ai/dsh-llm'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { WorkgroupError } from './error.ts'
+import { spawnWorkgroupSession } from './spawn.ts'
 import { WorkgroupId } from './types.ts'
 import type {} from './registry.ts'
 
@@ -26,11 +27,12 @@ export const inject = ['tools', 'systemPrompt']
 /** Guidance text for the model, registered as a system-prompt section. */
 const PROMPT_TEXT =
   'Use workgroup_create to form a named group of sessions with roles (e.g. 规划/执行/测试), workgroup_list '
-  + 'to see the groups your session belongs to and their members, workgroup_send to deliver a message to '
-  + 'another member session (it becomes that session\'s next turn), workgroup_members to add, remove, or '
-  + 're-role members, and workgroup_destroy to dissolve a group you own. Collaboration loop: delegate work '
-  + 'to member sessions, have each member report its result back through the group with workgroup_send, and '
-  + 'open any member session in the GUI to read its transcript.'
+  + 'to see the groups your session belongs to and their members, workgroup_spawn to create a new '
+  + 'collaborator session with a model and role background and add it to a group, workgroup_send to deliver '
+  + 'a message to another member session (it becomes that session\'s next turn), workgroup_members to add, '
+  + 'remove, or re-role members, and workgroup_destroy to dissolve a group you own. Collaboration loop: '
+  + 'delegate work to member sessions, have each member report its result back through the group with '
+  + 'workgroup_send, and open any member session in the GUI to read its transcript.'
 
 /** Render one member for the list tool. */
 function memberRow(sessionId: string, role: string): string {
@@ -305,6 +307,69 @@ export function applyTools(ctx: Context): void {
       }
       const status = ctx.workgroups.statusOf(groupId, args.message_id as MessageId)
       return status === undefined ? 'unknown' : status
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'workgroup_spawn',
+    description:
+      'Create a NEW session with an optional model and role background, and add it as a member of a '
+      + 'workgroup the calling session belongs to. Use it to stand up collaborator sessions with a defined '
+      + 'role (e.g. 执行/测试) and background — ask the user for the role, and optionally a model name and a '
+      + 'background describing the role — then direct the new member with workgroup_send. The new session '
+      + 'appears in the GUI session list and in workgroup_list.',
+    parameters: {
+      group_id: {
+        type: 'string',
+        required: true,
+        description: 'Workgroup id returned by workgroup_create or workgroup_list.',
+      },
+      role: {
+        type: 'string',
+        required: true,
+        description: 'Role label for the new session (1-64 characters), e.g. 执行 or 测试.',
+      },
+      model: {
+        type: 'string',
+        description: 'Optional model name for the new session; defaults to the current default model.',
+      },
+      background: {
+        type: 'string',
+        description: 'Optional role background injected into the new session\'s system prompt.',
+      },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          session_id: { type: 'string', required: true },
+          group_id: { type: 'string', required: true },
+        },
+      },
+      render: (_args, value) => [{
+        type: 'text',
+        text: `new session ${value.session_id} created and added to workgroup ${value.group_id}`,
+      }],
+    },
+    async execute(args, exec) {
+      const agent = requireAgent(exec.agent)
+      const groupId = WorkgroupId(args.group_id)
+      const view = ctx.workgroups.get(groupId)
+      if (view === undefined) {
+        throw new WorkgroupError('WORKGROUP_NOT_FOUND', `workgroup "${groupId}" does not exist`)
+      }
+      if (!view.members.some(member => member.sessionId === agent.id)) {
+        throw new WorkgroupError('WORKGROUP_NOT_MEMBER', `session "${agent.id}" is not a member of this workgroup`)
+      }
+      const result = await spawnWorkgroupSession(ctx, {
+        sender: agent,
+        groupId,
+        role: args.role,
+        model: args.model,
+        background: args.background,
+      })
+      return { session_id: result.sessionId, group_id: result.groupId }
     },
   }))
 }

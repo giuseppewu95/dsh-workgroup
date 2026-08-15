@@ -20,9 +20,14 @@ All notable changes to this project are documented here. Format follows [Keep a 
 
 ## [Unreleased]
 
+### Added
+
+- `workgroup_spawn` tool: guided creation of a new collaborator session with an optional model override and a role background (injected as a scoped `workgroup:role` system-prompt section), automatically added to the calling session's workgroup. Stays inside the model-tool identity model — no browser write surface.
+
 ### Fixed
 
 - `/workgroup` trust fence now accepts the deployment's `trustedHosts` (read from the connection service — the exact same source the harness `/api` fence uses) in addition to loopback — the panel previously 403'd when the GUI was reached through a Tailscale/LAN hostname.
+- Panel empty state now guides onboarding (how to create or join a workgroup).
 
 ## [0.1.0] - 2026-08-15
 

@@ -15,7 +15,7 @@ A workgroup lets you run a real collaboration loop across sessions — one sessi
 | Piece | Description |
 |---|---|
 | `ctx.workgroups` | Host service: durable registry (via `storage-domain`), member management, and authorized cross-session delivery |
-| `workgroup_create` / `workgroup_list` / `workgroup_send` / `workgroup_members` / `workgroup_destroy` / `workgroup_status` | Model tools: form groups, assign roles (规划/执行/测试…), send messages to member sessions, dissolve a group you own, query a delivered message's observed status |
+| `workgroup_create` / `workgroup_list` / `workgroup_spawn` / `workgroup_send` / `workgroup_members` / `workgroup_destroy` / `workgroup_status` | Model tools: form groups, assign roles (规划/执行/测试…), spawn a new collaborator session with a model and role background, send messages to member sessions, dissolve a group you own, query a delivered message's observed status |
 | Browser panel | A button in the session header listing the current session's groups and members with roles, running/idle status and relative last-active time; click a member to open that session |
 | `workgroup` message source | Messages delivered to a target session are logged as `user/message` with `source.kind: 'workgroup'` — model-visible, reconstructable from the log |
 

@@ -12,7 +12,9 @@ export type { WorkgroupDomainState, WorkgroupRecord } from './spec.ts';
 export type { WorkgroupMember, WorkgroupView } from './types.ts';
 export { WorkgroupId } from './types.ts';
 export { WorkgroupRegistry } from './registry.ts';
-export type { WorkgroupAddMemberOptions, WorkgroupCreateOptions, WorkgroupSendOptions, } from './registry.ts';
+export type { WorkgroupAddMemberOptions, WorkgroupCreateOptions, WorkgroupSendOptions, WorkgroupSendResult, } from './registry.ts';
+export { spawnWorkgroupSession } from './spawn.ts';
+export type { WorkgroupSpawnOptions, WorkgroupSpawnResult } from './spawn.ts';
 export declare const name = "dsh-workgroup";
 export declare const inject: string[];
 /**
