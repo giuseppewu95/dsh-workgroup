@@ -44,6 +44,20 @@ Then restart `dsh --profile web`. The session header shows a "工作群" button 
 
 > TUI/headless profiles work too: the model tools and the service are profile-agnostic; only the browser panel needs the web surface. Non-web profiles must mount `@deepseek-ai/dsh-storage-json` + `@deepseek-ai/dsh-storage-domain` (the web profile already does).
 
+## Quick start (fastest path)
+
+1. Restart dsh, open any session, and tell the model:
+   `创建标题为 "我的项目" 的工作群`（create a workgroup titled "my project"）.
+2. Add collaborators: pass their session ids in `workgroup_create`, or have each
+   member session run `workgroup_list` to report its own id, then
+   `workgroup_members add`.
+3. Direct work: `workgroup_send` to a member — the message becomes that
+   session's next turn.
+4. Track: `workgroup_status <message_id>` shows
+   `accepted → queued → started → turn_completed | failed`.
+5. The session-header button lists your groups and members at a glance; click a
+   member to open its session.
+
 ## Usage
 
 1. **Plan** in the main session: delegate work to subagents (`subagent`), or open the sessions you want in the group.
@@ -67,6 +81,19 @@ You:
   workgroup_send(group_id: "<g>", target_session_id: "<exec>", message: "报告已收到，请补充 <path> 的测试用例")
   workgroup_send(group_id: "<g>", target_session_id: "<test>", message: "可以开始回归")
 ```
+
+## Message status semantics
+
+`workgroup_send` returns a `message_id`; `workgroup_status` reports the observed state:
+
+| status | meaning |
+|---|---|
+| `accepted` | send validated; the delivery call succeeded |
+| `queued` | the target session's log holds the message (durable, survives restarts) |
+| `started` | the target session appended the message — its model will see it |
+| `turn_completed` | the turn **containing** the message ended (not a per-message consumption proof) |
+| `failed` | the turn containing the message ended in an error or abort |
+| `unknown` | this process has no record (after a restart or delivery from another process) |
 
 ## Development
 

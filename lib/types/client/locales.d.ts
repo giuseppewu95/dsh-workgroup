@@ -16,6 +16,7 @@ export declare const zh: {
     readonly 'member.open': "打开该会话";
     readonly 'member.running': "运行中";
     readonly 'member.inactive': "空闲";
+    readonly 'member.unavailable': "不可用";
     readonly 'time.just_now': "刚刚";
     readonly 'time.minutes_ago': "{n} 分钟前";
     readonly 'time.hours_ago': "{n} 小时前";

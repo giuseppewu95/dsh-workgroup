@@ -82,8 +82,9 @@ describe('workgroup tools', () => {
     const result = await tool.execute(
       { title: '开发组', members: [{ session_id: 's2', role: '执行' }] },
       { agent: fakeAgent('s1'), signal: new AbortController().signal },
-    ) as { groupId: string; title: string }
+    ) as { groupId: string; title: string; owner: string }
     expect(result.title).toBe('开发组')
+    expect(result.owner).toBe(SessionId('s1'))
     expect(registry.create).toHaveBeenCalledWith({
       title: '开发组',
       owner: SessionId('s1'),

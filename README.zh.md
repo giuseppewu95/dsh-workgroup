@@ -44,6 +44,14 @@ dsh plugin --profile web add github:giuseppewu95/dsh-workgroup
 
 > TUI/headless profile 同样可用：模型工具与服务与平台无关，只有浏览器面板依赖 web 界面。非 web profile 需自行挂载 `@deepseek-ai/dsh-storage-json` + `@deepseek-ai/dsh-storage-domain`（web profile 已内置）。
 
+## 快速开始（最短路径）
+
+1. 重启 dsh，打开任意会话，直接对模型说：`创建标题为 "我的项目" 的工作群`。
+2. 添加协作者：在 `workgroup_create` 里传入成员 session id；或让每个成员会话运行 `workgroup_list` 报告自己的 id，再 `workgroup_members add`。
+3. 派发工作：`workgroup_send` 给成员——消息成为该会话的下一轮次。
+4. 跟踪：`workgroup_status <message_id>` 显示 `accepted → queued → started → turn_completed | failed`。
+5. 会话头部按钮一屏查看群与成员；点击成员直接打开其会话。
+
 ## 用法
 
 1. **主会话规划**：把工作委派给 subagent，或打开你想要的会话。
@@ -67,6 +75,19 @@ dsh plugin --profile web add github:giuseppewu95/dsh-workgroup
   workgroup_send(group_id: "<g>", target_session_id: "<exec>", message: "报告已收到，请补充 <path> 的测试用例")
   workgroup_send(group_id: "<g>", target_session_id: "<test>", message: "可以开始回归")
 ```
+
+## 消息状态语义
+
+`workgroup_send` 返回 `message_id`；`workgroup_status` 报告观测状态：
+
+| 状态 | 含义 |
+|---|---|
+| `accepted` | 校验通过，投递调用成功 |
+| `queued` | 目标会话日志已持有该消息（持久，重启不丢） |
+| `started` | 目标会话已追加该消息——其模型将看到它 |
+| `turn_completed` | **包含**该消息的回合已结束（不是逐消息消费证明） |
+| `failed` | 包含该消息的回合以错误或中止结束 |
+| `unknown` | 本进程无记录（重启后或由其他进程投递） |
 
 ## 开发
 

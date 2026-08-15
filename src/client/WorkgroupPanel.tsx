@@ -62,7 +62,11 @@ function groupRows(
 
 /** Status label and dot for one member row. */
 function memberStatus(member: MemberRow, t: Translate): { state: 'ongoing' | 'done'; label: string } {
-  if (member.summary === undefined) return { state: 'done', label: t('member.inactive') }
+  if (member.summary === undefined) {
+    // The session kit has no record of this member session (deleted, archived,
+    // or not listed) — "idle" would be a misleading claim.
+    return { state: 'done', label: t('member.unavailable') }
+  }
   if (member.summary.running) return { state: 'ongoing', label: t('member.running') }
   return { state: 'done', label: t('member.inactive') }
 }

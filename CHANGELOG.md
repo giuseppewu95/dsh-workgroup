@@ -14,20 +14,19 @@ All notable changes to this project are documented here. Format follows [Keep a 
   observed state (`unknown` when this process has no record). `turn_completed`
   is explicitly turn-scoped, not a per-message consumption proof. See
   `docs/decisions/2026-08-15-delivery-ack-boundary.md`.
-- Real-model e2e baseline (`npm run test:e2e`): repeatable multi-session collaboration flow in a throwaway `DSH_HOME` (coordinator/executor/tester), asserting durable group records, `workgroup`-sourced messages in target session logs, the produced artifact, and at least one message reaching `turn_completed`. Skips (exit 0) without credentials; never part of `npm test`/CI.
+- Real-model e2e baseline (`npm run test:e2e`): repeatable multi-session collaboration flow in a throwaway `DSH_HOME` (coordinator/executor/tester), asserting durable group records, `workgroup`-sourced messages in target session logs, the produced artifact, ack reaching `turn_completed`, and a guided spawn (session created, member, live). Skips (exit 0) without credentials; never part of `npm test`/CI.
 - Resource limits as protocol constants (not config): 64 workgroups, 32 members per group (owner included), 256 KiB serialized bytes per message (UTF-8). Enforced at the service layer with a new `WORKGROUP_LIMIT_EXCEEDED` code; no partial writes on rejection.
 - Panel: idle members show a relative last-active label derived from the session kit (`updatedAt`), no new API or authorization surface.
-
-## [Unreleased]
-
-### Added
-
 - `workgroup_spawn` tool: guided creation of a new collaborator session with an optional model override and a role background (injected as a scoped `workgroup:role` system-prompt section), automatically added to the calling session's workgroup. Stays inside the model-tool identity model — no browser write surface.
+- README: quick-start path and message-status semantics sections (zh/en).
 
 ### Fixed
 
 - `/workgroup` trust fence now accepts the deployment's `trustedHosts` (read from the connection service — the exact same source the harness `/api` fence uses) in addition to loopback — the panel previously 403'd when the GUI was reached through a Tailscale/LAN hostname.
 - Panel empty state now guides onboarding (how to create or join a workgroup).
+- Panel marks members missing from the session kit as "unavailable" instead of the misleading "idle".
+- `workgroup_create` returns the owner session id; tool descriptions and send/create renders now point the model at the next step (`workgroup_list`, `workgroup_status`).
+- Registry errors are actionable: they state what happened and the next step (e.g. "use workgroup_list to inspect available groups", "dissolve an unused one with workgroup_destroy first").
 
 ## [0.1.0] - 2026-08-15
 

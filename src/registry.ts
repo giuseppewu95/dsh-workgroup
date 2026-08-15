@@ -178,7 +178,7 @@ export class WorkgroupRegistry extends Service {
       if (this.state.workgroupIds.length >= MAX_GROUPS) {
         throw new WorkgroupError(
           'WORKGROUP_LIMIT_EXCEEDED',
-          `cannot create more than ${MAX_GROUPS} workgroups`,
+          `cannot create more than ${MAX_GROUPS} workgroups; dissolve an unused one with workgroup_destroy first`,
         )
       }
       const id = WorkgroupId(randomUUID())
@@ -194,7 +194,7 @@ export class WorkgroupRegistry extends Service {
       if (deduped.length + 1 > MAX_MEMBERS_PER_GROUP) {
         throw new WorkgroupError(
           'WORKGROUP_LIMIT_EXCEEDED',
-          `a workgroup cannot have more than ${MAX_MEMBERS_PER_GROUP} members`,
+          `a workgroup cannot have more than ${MAX_MEMBERS_PER_GROUP} members; remove a member with workgroup_members first`,
         )
       }
       const members = [
@@ -261,13 +261,13 @@ export class WorkgroupRegistry extends Service {
       if (record.members.some(member => member.sessionId === options.sessionId)) {
         throw new WorkgroupError(
           'WORKGROUP_MEMBER_EXISTS',
-          `session "${options.sessionId}" is already a member of workgroup "${options.groupId}"`,
+          `session "${options.sessionId}" is already a member of workgroup "${options.groupId}"; use workgroup_list to see current members`,
         )
       }
       if (record.members.length >= MAX_MEMBERS_PER_GROUP) {
         throw new WorkgroupError(
           'WORKGROUP_LIMIT_EXCEEDED',
-          `a workgroup cannot have more than ${MAX_MEMBERS_PER_GROUP} members`,
+          `a workgroup cannot have more than ${MAX_MEMBERS_PER_GROUP} members; remove a member with workgroup_members first`,
         )
       }
       const next: WorkgroupRecord = {
@@ -382,12 +382,12 @@ export class WorkgroupRegistry extends Service {
       )
     }
     if (options.targetSessionId === options.sender.id) {
-      throw new WorkgroupError('WORKGROUP_SELF_SEND', 'a workgroup message cannot target the sender itself')
+      throw new WorkgroupError('WORKGROUP_SELF_SEND', 'a workgroup message cannot target the sender itself; pick another member session')
     }
     if (!record.members.some(member => member.sessionId === options.targetSessionId)) {
       throw new WorkgroupError(
         'WORKGROUP_NOT_MEMBER',
-        `session "${options.targetSessionId}" is not a member of workgroup "${options.groupId}"`,
+        `session "${options.targetSessionId}" is not a member of workgroup "${options.groupId}"; use workgroup_list to see current members`,
       )
     }
     const messageId = await deliverWorkgroupMessage(this.ctx, {
@@ -480,7 +480,7 @@ export class WorkgroupRegistry extends Service {
   private require(groupId: WorkgroupId): WorkgroupRecord {
     const record = this.groups.get(groupId)
     if (record === undefined) {
-      throw new WorkgroupError('WORKGROUP_NOT_FOUND', `workgroup "${groupId}" does not exist`)
+      throw new WorkgroupError('WORKGROUP_NOT_FOUND', `workgroup "${groupId}" does not exist; use workgroup_list to inspect available groups`)
     }
     return record
   }

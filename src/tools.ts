@@ -86,11 +86,12 @@ export function applyTools(ctx: Context): void {
         properties: {
           groupId: { type: 'string', required: true },
           title: { type: 'string', required: true },
+          owner: { type: 'string', required: true },
         },
       },
       render: (args, value) => [{
         type: 'text',
-        text: `workgroup "${value.title}" created (${value.groupId})`,
+        text: `workgroup "${value.title}" created (${value.groupId}); the calling session is the owner. Use workgroup_list to see members, then workgroup_send to direct them.`,
       }],
     },
     async execute(args, exec) {
@@ -103,15 +104,16 @@ export function applyTools(ctx: Context): void {
           role: member.role,
         })),
       })
-      return { groupId: view.id, title: view.title }
+      return { groupId: view.id, title: view.title, owner: view.ownerSessionId }
     },
   }))
 
   ctx.tools.register(defineTool({
     name: 'workgroup_list',
     description:
-      'List the workgroups the calling session belongs to, with every member session and its role. Use it to '
-      + 'recall which sessions collaborate on a shared effort before sending messages or reading their logs.',
+      'List the workgroups the calling session belongs to, with every member session id and its role. Call '
+      + 'this first when you need a member\'s session id for workgroup_send or workgroup_members, or to recall '
+      + 'which sessions collaborate on a shared effort.',
     parameters: {},
     output: {
       schema: { type: 'string' },
@@ -161,7 +163,9 @@ export function applyTools(ctx: Context): void {
       },
       render: (_args, value) => [{
         type: 'text',
-        text: value.delivered ? 'message delivered to the target session' : 'message delivery failed',
+        text: value.delivered
+          ? `message delivered to the target session (message_id ${value.message_id}); query workgroup_status with this id to see whether the target started or completed processing`
+          : 'message delivery failed',
       }],
     },
     async execute(args, exec) {
@@ -197,7 +201,7 @@ export function applyTools(ctx: Context): void {
       session_id: {
         type: 'string',
         required: true,
-        description: 'Session id of the member to add, remove, or re-role.',
+        description: 'Session id of the member to add, remove, or re-role. For a new member, ask the user for its session id, or have that session run workgroup_list to report it.',
       },
       role: {
         type: 'string',

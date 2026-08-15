@@ -53,6 +53,7 @@ function props(overrides: {
         'member.open': '打开该会话',
         'member.running': '运行中',
         'member.inactive': '空闲',
+        'member.unavailable': '不可用',
         'time.just_now': '刚刚',
         'time.minutes_ago': '{n} 分钟前',
         'time.hours_ago': '{n} 小时前',
@@ -140,6 +141,25 @@ describe('WorkgroupPanel', () => {
     expect(await screen.findByText(/5 分钟前/)).toBeTruthy()
     // Running members show no relative time.
     expect(screen.queryByText(/分钟前/)).toBeTruthy()
+  })
+
+  it('shows unavailable for members missing from the session kit', async () => {
+    const groups: WorkgroupGroupWire[] = [{
+      id: 'g1', title: '开发组', ownerSessionId: 's1',
+      members: [
+        { sessionId: 's1', role: 'owner' },
+        { sessionId: 'gone', role: '执行' },
+      ],
+    }]
+    render(<WorkgroupPanel {...props({
+      groups,
+      summaries: { s1: summary('s1', false, '规划会话') },
+    })} />)
+    fireEvent.click(screen.getByRole('button', { name: '无工作群' }))
+    fireEvent.click(await screen.findByText('开发组'))
+    // The member missing from the session kit is marked unavailable (not idle);
+    // the owner with a summary legitimately shows idle.
+    expect(await screen.findByText(/不可用/)).toBeTruthy()
   })
 
   it('shows the empty state with onboarding guidance when the session belongs to no group', async () => {
