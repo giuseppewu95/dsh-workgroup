@@ -18,6 +18,12 @@ All notable changes to this project are documented here. Format follows [Keep a 
 - Resource limits as protocol constants (not config): 64 workgroups, 32 members per group (owner included), 256 KiB serialized bytes per message (UTF-8). Enforced at the service layer with a new `WORKGROUP_LIMIT_EXCEEDED` code; no partial writes on rejection.
 - Panel: idle members show a relative last-active label derived from the session kit (`updatedAt`), no new API or authorization surface.
 
+## [Unreleased]
+
+### Fixed
+
+- `/workgroup` trust fence now accepts the deployment's `trustedHosts` (read from `ctx.webRuntime`, the same source the harness `/api` fence uses) in addition to loopback — the panel previously 403'd when the GUI was reached through a Tailscale/LAN hostname (`--trusted-host`).
+
 ## [0.1.0] - 2026-08-15
 
 ### Added

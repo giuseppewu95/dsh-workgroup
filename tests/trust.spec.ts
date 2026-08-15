@@ -55,4 +55,24 @@ describe('isTrustedWorkgroupRequest', () => {
   it('refuses a missing host', () => {
     expect(isTrustedWorkgroupRequest({})).toBe(false)
   })
+
+  it('accepts a declared trusted authority in addition to loopback', () => {
+    const trusted = ['desktop-fpmv000.tail23e737.ts.net']
+    expect(isTrustedWorkgroupRequest({ host: 'desktop-fpmv000.tail23e737.ts.net' }, trusted)).toBe(true)
+    expect(isTrustedWorkgroupRequest({ host: 'desktop-fpmv000.tail23e737.ts.net:443' }, trusted)).toBe(true)
+    expect(isTrustedWorkgroupRequest({
+      host: 'desktop-fpmv000.tail23e737.ts.net',
+      origin: 'https://desktop-fpmv000.tail23e737.ts.net',
+    }, trusted)).toBe(true)
+  })
+
+  it('refuses an undeclared non-loopback host even with a trusted list', () => {
+    const trusted = ['desktop-fpmv000.tail23e737.ts.net']
+    expect(isTrustedWorkgroupRequest({ host: 'other.example' }, trusted)).toBe(false)
+    expect(isTrustedWorkgroupRequest({ host: 'other.example', origin: 'https://other.example' }, trusted)).toBe(false)
+  })
+
+  it('defaults to loopback-only when no trusted hosts are given', () => {
+    expect(isTrustedWorkgroupRequest({ host: 'desktop-fpmv000.tail23e737.ts.net' })).toBe(false)
+  })
 })

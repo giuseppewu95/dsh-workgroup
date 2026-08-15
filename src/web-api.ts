@@ -40,10 +40,15 @@ export function registerWorkgroupApi(
 ): (() => void) | undefined {
   const webServer = ctx.get('webServer')
   if (webServer === undefined) return undefined
+  // The same trusted authorities the harness /api fence accepts: a deployment
+  // reachable through a Tailscale/LAN hostname must trust that name for this
+  // surface too, or the panel's fetch would 403 from the browser.
+  const webRuntime = ctx.get('webRuntime') as { trustedHosts?: readonly string[] } | undefined
+  const trustedHosts = webRuntime?.trustedHosts ?? []
   return webServer.register({
     kind: 'prefix',
     path: '/workgroup',
-    handler: (req, res) => handleWorkgroupRequest(ctx, registry, req, res),
+    handler: (req, res) => handleWorkgroupRequest(ctx, registry, trustedHosts, req, res),
   })
 }
 
@@ -51,14 +56,15 @@ export function registerWorkgroupApi(
 function handleWorkgroupRequest(
   ctx: Context,
   registry: WorkgroupRegistry,
+  trustedHosts: readonly string[],
   req: IncomingMessage,
   res: ServerResponse,
 ): void {
   try {
     // Same confused-deputy fence the harness applies to /api: loopback Host
-    // plus same-origin browser markers. Anything else gets 403 before any
-    // membership data is read.
-    if (!isTrustedWorkgroupRequest(req.headers)) {
+    // (or a declared trusted authority) plus same-origin browser markers.
+    // Anything else gets 403 before any membership data is read.
+    if (!isTrustedWorkgroupRequest(req.headers, trustedHosts)) {
       sendJson(res, 403, { error: 'untrusted request' })
       return
     }

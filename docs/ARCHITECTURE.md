@@ -72,9 +72,11 @@ All registry mutations (`create`, `addMember`, `removeMember`, `setRole`, `destr
 
 The GUI half reads `/workgroup/list` over same-origin fetch. The harness's `/api` surface carries a confused-deputy fence (loopback Host + same-origin browser markers) in `@deepseek-ai/dsh-client-connection` — but that fence is not exported. `src/trust.ts` mirrors the same rule locally so the plugin's route is not a bypass:
 
-- Host header must be a loopback authority;
+- Host header must be a loopback authority **or a declared trusted authority**;
 - `sec-fetch-site: cross-site` is refused;
 - an attached `Origin` must equal the Host authority.
+
+Trusted authorities are read from `ctx.webRuntime.trustedHosts` — the same source the harness `/api` fence uses — so a deployment reachable through a Tailscale/LAN hostname (`--trusted-host`) trusts the same names for both surfaces.
 
 This is a defense against DNS-rebinding and cross-site reads, **not** authentication; reachability still follows the webserver bind policy (documented in the README).
 
