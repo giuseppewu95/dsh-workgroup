@@ -1,3 +1,25 @@
+# Dependencies
 node_modules/
+
+# Build output — lib/ is intentionally committed for build-free git installs,
+# so only stray artifacts are ignored here.
+*.tsbuildinfo
+
+# Test output
+coverage/
+coverage-html/
+
+# Logs and temp
 *.log
+npm-debug.log*
 .DS_Store
+
+# Local env / secrets
+.env
+.env.*
+!.env.example
+
+# Editor
+.idea/
+.vscode/
+*.swp

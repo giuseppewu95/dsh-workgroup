@@ -3,6 +3,29 @@
   "description": "Durable workgroup capability for DeepSeek Harness: named session groups with roles, cross-session messaging, and a GUI member panel",
   "version": "0.1.0",
   "license": "MIT",
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "plugin",
+    "workgroup",
+    "multi-agent",
+    "cross-session"
+  ],
+  "author": "dsh-workgroup contributors",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/your-name/dsh-workgroup.git"
+  },
+  "homepage": "https://github.com/your-name/dsh-workgroup#readme",
+  "bugs": {
+    "url": "https://github.com/your-name/dsh-workgroup/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "sideEffects": [
+    "./lib/client.js"
+  ],
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
@@ -41,7 +64,8 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "react": "^18.2.0"

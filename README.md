@@ -74,7 +74,7 @@ You:
 npm install
 npm run typecheck    # tsc --noEmit
 npm test             # vitest: unit + component + composition
-npm run build        # esbuild: lib/index.js (host ESM) + lib/client.js (browser)
+npm run build        # esbuild lib/index.js (host ESM) + lib/client.js (browser) + tsc lib/types (declarations)
 ```
 
 The browser bundle is emitted in the harness's module-loader format (`window.__ModuleLoader__.load`), with platform modules left external; the host half keeps every package external and resolves them from the profile install at runtime.
@@ -89,8 +89,14 @@ src/spec.ts          # storage-domain spec (zod schemas)
 src/delivery.ts      # identity-based target resolution and delivery
 src/tools.ts         # workgroup_* model tools + prompt section
 src/web-api.ts       # read-only /workgroup JSON API for the browser half
-src/client/          # browser half: header panel, locales, styles
-tests/               # vitest suites (spec/registry/tools/web-api/panel/composition)
+src/trust.ts         # loopback/same-origin fence for /workgroup (mirrors harness /api)
+src/error.ts         # WorkgroupError + stable WORKGROUP_* codes
+src/message-source.ts# 'workgroup' MessageSourceMap merge
+src/types.ts         # WorkgroupId brand + WorkgroupView
+src/client/          # browser half: WorkgroupPanel.tsx, locales, styles
+tests/               # vitest suites (spec/registry/tools/web-api/trust/panel/composition)
+docs/ARCHITECTURE.md # design rationale (layering, delivery, concurrency, trust, decisions)
+AGENTS.md            # fresh-session onboarding: layout, commands, design facts
 ```
 
 ## Known Limitations and Deferred Work

@@ -74,7 +74,7 @@ dsh plugin --profile web add github:your-name/dsh-workgroup
 npm install
 npm run typecheck    # tsc --noEmit
 npm test             # vitest：单元 + 组件 + 组合
-npm run build        # esbuild：lib/index.js（host ESM）+ lib/client.js（浏览器）
+npm run build        # esbuild lib/index.js（host ESM）+ lib/client.js（浏览器）+ tsc lib/types（类型声明）
 ```
 
 浏览器 bundle 采用 harness 的模块加载器格式（`window.__ModuleLoader__.load`），平台模块保持 external；host 半面所有依赖 external，运行时从 profile 安装解析。
@@ -89,8 +89,14 @@ src/spec.ts          # storage-domain spec（zod schema）
 src/delivery.ts      # 基于身份的目标准则与投递
 src/tools.ts         # workgroup_* 模型工具 + prompt section
 src/web-api.ts       # 供浏览器半面读取的只读 /workgroup JSON API
-src/client/          # 浏览器半面：头部面板、locales、样式
-tests/               # vitest（spec/registry/tools/web-api/panel/composition）
+src/trust.ts         # /workgroup 的回环/同源围栏（镜像 harness /api）
+src/error.ts         # WorkgroupError + 稳定 WORKGROUP_* 错误码
+src/message-source.ts# 'workgroup' MessageSourceMap 合并
+src/types.ts         # WorkgroupId 品牌 + WorkgroupView
+src/client/          # 浏览器半面：WorkgroupPanel.tsx、locales、样式
+tests/               # vitest（spec/registry/tools/web-api/trust/panel/composition）
+docs/ARCHITECTURE.md # 设计理念（分层、投递、并发、信任、决策记录）
+AGENTS.md            # 新手会话快速上手：结构、命令、设计要点
 ```
 
 ## 已知限制与待办
