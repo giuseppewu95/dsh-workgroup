@@ -57,7 +57,7 @@ function props(overrides: {
         'time.minutes_ago': '{n} 分钟前',
         'time.hours_ago': '{n} 小时前',
         'time.days_ago': '{n} 天前',
-        'empty': '本会话不属于任何工作群。',
+        'empty': '本会话不属于任何工作群。直接对模型说"创建标题为 X 的工作群"即可建群；或让其他会话把你加入已有群。',
         'load.error': '工作群加载失败',
         'retry': '重试',
       }
