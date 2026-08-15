@@ -144,11 +144,25 @@ try {
   mkdirSync(join(localPkg, 'lib'), { recursive: true })
 
   // dsh-workgroup: real copy (package.json + patch + built lib) so the bundle
-  // resolver and loader find it without any symlink traversal.
+  // resolver and loader find it without any symlink traversal. Default source:
+  // the fresh repo build; with E2E_WORKGROUP_TARBALL the npm tarball is
+  // unpacked instead — a packaging smoke (publish gate).
   const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
-  copyFileSync(join(repoRoot, 'package.json'), join(wgCopy, 'package.json'))
-  copyFileSync(join(repoRoot, 'cordis.patch.yml'), join(wgCopy, 'cordis.patch.yml'))
-  cpSync(join(repoRoot, 'lib'), join(wgCopy, 'lib'), { recursive: true })
+  const tarball = process.env.E2E_WORKGROUP_TARBALL
+  if (tarball !== undefined) {
+    const unpack = join(home, 'unpack')
+    mkdirSync(unpack, { recursive: true })
+    const tar = spawnSync('tar', ['-xzf', tarball, '-C', unpack], { encoding: 'utf8' })
+    if (tar.status !== 0) throw new Error(`cannot unpack tarball: ${tar.stderr}`)
+    const pkgDir = join(unpack, 'package')
+    copyFileSync(join(pkgDir, 'package.json'), join(wgCopy, 'package.json'))
+    copyFileSync(join(pkgDir, 'cordis.patch.yml'), join(wgCopy, 'cordis.patch.yml'))
+    cpSync(join(pkgDir, 'lib'), join(wgCopy, 'lib'), { recursive: true })
+  } else {
+    copyFileSync(join(repoRoot, 'package.json'), join(wgCopy, 'package.json'))
+    copyFileSync(join(repoRoot, 'cordis.patch.yml'), join(wgCopy, 'cordis.patch.yml'))
+    cpSync(join(repoRoot, 'lib'), join(wgCopy, 'lib'), { recursive: true })
+  }
 
   // Test-only driver bundle.
   const driverSrc = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'scripts', 'e2e-collab')

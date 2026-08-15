@@ -36,3 +36,22 @@ npm run build        # regenerate lib/ before committing distribution artifacts
 1. `npm run typecheck && npm test && npm run build` all green.
 2. READMEs and `CHANGELOG.md` updated (Unreleased section).
 3. `docs/ARCHITECTURE.md` decision record extended when a new decision was made.
+
+## Releasing (v0.1.x)
+
+The publish gates must ALL pass before `npm publish`; a failed gate stops the
+release — never bypass one.
+
+1. `npm test` green (unit suite).
+2. `npm run test:e2e` green with real credentials (see README; skips without).
+3. `npm pack --dry-run` content reviewed: only `package.json`, `cordis.patch.yml`,
+   `lib/` (host + client + declarations), LICENSE, READMEs — no secrets, no
+   test files, no local data.
+4. `npm run test:e2e` green again with `E2E_WORKGROUP_TARBALL=<the packed .tgz>`
+   — proves the published artifact itself boots and collaborates.
+5. Version and tag in sync (`package.json` ↔ `CHANGELOG.md` ↔ git tag).
+6. `npm publish` (requires `npm login`; `prepublishOnly` rebuilds).
+7. `gh release create <tag>` with release notes from the changelog.
+8. Smoke on a clean environment per the user docs: plugin discovered, host
+   boots, panel assets load, `/workgroup/list` answers, and a
+   create/list/send round-trip works.

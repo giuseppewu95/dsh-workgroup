@@ -4,6 +4,7 @@ node_modules/
 # Build output — lib/ is intentionally committed for build-free git installs,
 # so only stray artifacts are ignored here.
 *.tsbuildinfo
+*.tgz
 
 # Test output
 coverage/
