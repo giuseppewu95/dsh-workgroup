@@ -77,6 +77,18 @@ npm test             # vitest: unit + component + composition
 npm run build        # esbuild lib/index.js (host ESM) + lib/client.js (browser) + tsc lib/types (declarations)
 ```
 
+### Real-model e2e (optional)
+
+`npm run test:e2e` replays the full multi-session collaboration flow against a real model: it builds a throwaway `DSH_HOME` (temp dir, never touches your profiles/data), boots a headless profile, drives coordinator/executor/tester sessions through `workgroup_create`/`workgroup_send`, and asserts on hard evidence — durable group records, `workgroup`-sourced messages inside the target session logs, and the produced artifact.
+
+```sh
+npm run test:e2e                # uses ~/.dsh credentials + web profile node_modules
+E2E_CREDENTIALS_SOURCE=... npm run test:e2e   # credentials from another dsh home
+npm run test:e2e -- --keep      # keep the temp DSH_HOME on failure for debugging
+```
+
+Without credentials the run prints `E2E_SKIP` and exits 0 — it never fails a keyless environment, and it is **not** part of the normal `npm test` or CI. Credentials are only ever copied from `E2E_CREDENTIALS_SOURCE` (default `~/.dsh`) into the temp home; nothing sensitive is written to the repository.
+
 The browser bundle is emitted in the harness's module-loader format (`window.__ModuleLoader__.load`), with platform modules left external; the host half keeps every package external and resolves them from the profile install at runtime.
 
 ### Package layout

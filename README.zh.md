@@ -77,6 +77,18 @@ npm test             # vitest：单元 + 组件 + 组合
 npm run build        # esbuild lib/index.js（host ESM）+ lib/client.js（浏览器）+ tsc lib/types（类型声明）
 ```
 
+### 真实模型 e2e（可选）
+
+`npm run test:e2e` 用真实模型重放完整多会话协作流程：构建一次性临时 `DSH_HOME`（系统临时目录，绝不触碰你的 profile/数据），启动 headless profile，驱动协调者/执行者/测试者三个会话走 `workgroup_create`/`workgroup_send`，并对硬证据断言——持久化的群记录、目标会话日志中的 `workgroup` 来源消息、以及协作产物。
+
+```sh
+npm run test:e2e                # 使用 ~/.dsh 凭证与 web profile 的 node_modules
+E2E_CREDENTIALS_SOURCE=... npm run test:e2e   # 从其他 dsh home 取凭证
+npm run test:e2e -- --keep      # 失败时保留临时 DSH_HOME 以便调试
+```
+
+无凭证时打印 `E2E_SKIP` 并以 0 退出——无 key 环境不会失败，且**不属于**常规 `npm test` 或 CI。凭证只会从 `E2E_CREDENTIALS_SOURCE`（默认 `~/.dsh`）复制进临时 home；仓库中不写入任何敏感信息。
+
 浏览器 bundle 采用 harness 的模块加载器格式（`window.__ModuleLoader__.load`），平台模块保持 external；host 半面所有依赖 external，运行时从 profile 安装解析。
 
 ### 包结构

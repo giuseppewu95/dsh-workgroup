@@ -65,6 +65,7 @@
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:e2e": "node tests/e2e/run.mjs",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {

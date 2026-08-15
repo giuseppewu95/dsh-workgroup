@@ -1,0 +1,5 @@
+# Test-only bundle: multi-session collaboration driver for the e2e baseline.
+# Copied into the temporary profile by tests/e2e/run.mjs; never published.
+- insert:
+    - id: e2e-collab
+      name: '@local/e2e-collab'
