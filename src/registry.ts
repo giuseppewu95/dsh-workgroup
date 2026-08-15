@@ -80,6 +80,19 @@ const TITLE_MIN = 1
 const TITLE_MAX = 200
 
 /**
+ * Resource bounds, protocol constants (deliberately not configurable): they
+ * exist to keep a misbehaving or malicious caller from growing the registry
+ * or a payload without bound. Values are generous for real collaboration and
+ * far below anything a normal user could hit; they are not quotas.
+ */
+/** Max workgroups one registry may hold. */
+const MAX_GROUPS = 64
+/** Max members one workgroup may hold (owner included). */
+const MAX_MEMBERS_PER_GROUP = 32
+/** Max serialized bytes of one delivered message (UTF-8). */
+const MAX_MESSAGE_BYTES = 256 * 1024
+
+/**
  * Durable workgroup registry. All mutations funnel through the domain write
  * chain (durability first, then memory, then `domain/changed`); reads are
  * synchronous from the in-memory record cache. Every read-modify-write
@@ -130,20 +143,31 @@ export class WorkgroupRegistry extends Service {
     return this.enqueueOperation(async () => {
       validateTitle(options.title)
       for (const member of options.members ?? []) validateRole(member.role)
+      if (this.state.workgroupIds.length >= MAX_GROUPS) {
+        throw new WorkgroupError(
+          'WORKGROUP_LIMIT_EXCEEDED',
+          `cannot create more than ${MAX_GROUPS} workgroups`,
+        )
+      }
       const id = WorkgroupId(randomUUID())
       const now = new Date().toISOString()
       // The owner is already a member; duplicate entries (the owner itself or
       // a repeated session) are dropped rather than persisted.
       const seen = new Set<SessionId>([options.owner])
+      const deduped = (options.members ?? []).filter(member => {
+        if (seen.has(member.sessionId)) return false
+        seen.add(member.sessionId)
+        return true
+      })
+      if (deduped.length + 1 > MAX_MEMBERS_PER_GROUP) {
+        throw new WorkgroupError(
+          'WORKGROUP_LIMIT_EXCEEDED',
+          `a workgroup cannot have more than ${MAX_MEMBERS_PER_GROUP} members`,
+        )
+      }
       const members = [
         { sessionId: options.owner, role: 'owner', joinedAt: now },
-        ...(options.members ?? [])
-          .filter(member => {
-            if (seen.has(member.sessionId)) return false
-            seen.add(member.sessionId)
-            return true
-          })
-          .map(member => ({ ...member, joinedAt: now })),
+        ...deduped.map(member => ({ ...member, joinedAt: now })),
       ]
       const record: WorkgroupRecord = {
         id,
@@ -206,6 +230,12 @@ export class WorkgroupRegistry extends Service {
         throw new WorkgroupError(
           'WORKGROUP_MEMBER_EXISTS',
           `session "${options.sessionId}" is already a member of workgroup "${options.groupId}"`,
+        )
+      }
+      if (record.members.length >= MAX_MEMBERS_PER_GROUP) {
+        throw new WorkgroupError(
+          'WORKGROUP_LIMIT_EXCEEDED',
+          `a workgroup cannot have more than ${MAX_MEMBERS_PER_GROUP} members`,
         )
       }
       const next: WorkgroupRecord = {
@@ -305,6 +335,12 @@ export class WorkgroupRegistry extends Service {
    *   message is not delivered on any rejection.
    */
   async send(options: WorkgroupSendOptions): Promise<void> {
+    if (serializedBytes(options.content) > MAX_MESSAGE_BYTES) {
+      throw new WorkgroupError(
+        'WORKGROUP_LIMIT_EXCEEDED',
+        `a workgroup message cannot exceed ${MAX_MESSAGE_BYTES} serialized bytes`,
+      )
+    }
     const record = this.require(options.groupId)
     if (!record.members.some(member => member.sessionId === options.sender.id)) {
       throw new WorkgroupError(
@@ -363,6 +399,11 @@ function validateRole(role: string): void {
       `role must be a string of ${ROLE_MIN}..${ROLE_MAX} characters`,
     )
   }
+}
+
+/** UTF-8 serialized size of one message payload (the actual storage cost). */
+function serializedBytes(content: readonly ContentBlock[]): number {
+  return Buffer.byteLength(JSON.stringify(content), 'utf8')
 }
 
 /** Validate one title against the durable schema bounds. */

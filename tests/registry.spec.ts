@@ -430,4 +430,86 @@ describe('error types', () => {
   })
 })
 
+describe('resource limits', () => {
+  it('rejects creating beyond the workgroup cap without partial writes', async () => {
+    const { registry } = await harness()
+    for (let i = 0; i < 64; i++) {
+      await registry.create({ title: `g${i}`, owner: SessionId(`s${i}`) })
+    }
+    await expect(registry.create({ title: 'g65', owner: SessionId('s65') }))
+      .rejects.toMatchObject({ code: 'WORKGROUP_LIMIT_EXCEEDED' })
+    expect(registry.list()).toHaveLength(64)
+  })
+
+  it('accepts an initial member set at the cap and rejects beyond it', async () => {
+    const { registry } = await harness()
+    const atCap = Array.from({ length: 31 }, (_, i) => ({ sessionId: SessionId(`m${i}`), role: 'x' }))
+    const ok = await registry.create({ title: 'g', owner: SessionId('s0'), members: atCap })
+    expect(ok.members).toHaveLength(32)
+    const over = Array.from({ length: 32 }, (_, i) => ({ sessionId: SessionId(`o${i}`), role: 'x' }))
+    await expect(registry.create({ title: 'g2', owner: SessionId('s1'), members: over }))
+      .rejects.toMatchObject({ code: 'WORKGROUP_LIMIT_EXCEEDED' })
+    expect(registry.list()).toHaveLength(1)
+  })
+
+  it('rejects adding a member beyond the cap without partial writes', async () => {
+    const { registry } = await harness()
+    const group = await registry.create({ title: 'g', owner: SessionId('s0') })
+    for (let i = 0; i < 31; i++) {
+      await registry.addMember({ groupId: group.id, sessionId: SessionId(`m${i}`), role: 'x' })
+    }
+    await expect(registry.addMember({ groupId: group.id, sessionId: SessionId('m31'), role: 'x' }))
+      .rejects.toMatchObject({ code: 'WORKGROUP_LIMIT_EXCEEDED' })
+    expect(registry.get(group.id)?.members).toHaveLength(32)
+  })
+
+  it('rejects a message over the serialized byte cap before any delivery', async () => {
+    const { registry, addAgent } = await harness()
+    const group = await registry.create({ title: 'g', owner: SessionId('s1') })
+    await registry.addMember({ groupId: group.id, sessionId: SessionId('s2'), role: '执行' })
+    const sender = fakeAgent('s1')
+    const receiver = fakeAgent('s2')
+    const followups: string[] = []
+    receiver.followup = (message: { content?: unknown }) => { followups.push(String(message.content)) }
+    addAgent(sender)
+    addAgent(receiver)
+    await expect(registry.send({
+      sender,
+      groupId: group.id,
+      targetSessionId: SessionId('s2'),
+      content: [{ type: 'text', text: 'x'.repeat(300 * 1024) }],
+      signal,
+    })).rejects.toMatchObject({ code: 'WORKGROUP_LIMIT_EXCEEDED' })
+    expect(followups).toHaveLength(0)
+    await registry.send({
+      sender,
+      groupId: group.id,
+      targetSessionId: SessionId('s2'),
+      content: [{ type: 'text', text: 'x'.repeat(100 * 1024) }],
+      signal,
+    })
+    expect(followups).toHaveLength(1)
+  })
+
+  it('measures message size in UTF-8 bytes, not characters', async () => {
+    const { registry, addAgent } = await harness()
+    const group = await registry.create({ title: 'g', owner: SessionId('s1') })
+    await registry.addMember({ groupId: group.id, sessionId: SessionId('s2'), role: '执行' })
+    const sender = fakeAgent('s1')
+    const receiver = fakeAgent('s2')
+    receiver.followup = () => {}
+    addAgent(sender)
+    addAgent(receiver)
+    // 100_000 CJK chars = 300_000 UTF-8 bytes (> cap) but 100_000 "characters"
+    // (< cap): a char-count check would wrongly pass.
+    await expect(registry.send({
+      sender,
+      groupId: group.id,
+      targetSessionId: SessionId('s2'),
+      content: [{ type: 'text', text: '测'.repeat(100_000) }],
+      signal,
+    })).rejects.toMatchObject({ code: 'WORKGROUP_LIMIT_EXCEEDED' })
+  })
+})
+
 afterEach(() => {})

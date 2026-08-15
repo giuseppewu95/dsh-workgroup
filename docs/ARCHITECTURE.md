@@ -48,6 +48,7 @@ Design decisions:
 - **The owner is a member with role `owner`** and cannot be removed. Members are otherwise equal; the only owner authority is dissolving the group (`workgroup_destroy`).
 - **`workgroupIds` order is the display order**, mirroring the workspace domain pattern. Reads are synchronous from an in-memory cache; the cache is authoritative in-process and rebuilt from the domain at boot.
 - **Bounds are validated at the service layer, not only in the zod schema.** `storage-domain` validates stored records only when the unit loads; a malformed value written today would refuse to load tomorrow, poisoning the whole domain. `validateRole`/`validateTitle` run before any write.
+- **Resource bounds are protocol constants, not configuration.** 64 workgroups, 32 members per group, 256 KiB serialized bytes per message — generous ceilings that keep a misbehaving or malicious caller from growing the registry or payloads without bound. They are abuse guards, not quotas; configurable limits can wait for a real user hitting one.
 
 ## 4. Delivery semantics
 

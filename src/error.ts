@@ -19,6 +19,7 @@ export type WorkgroupErrorCode =
   | 'WORKGROUP_OWNER_REMOVAL'
   | 'WORKGROUP_NOT_OWNER'
   | 'WORKGROUP_INVALID_INPUT'
+  | 'WORKGROUP_LIMIT_EXCEEDED'
   | 'WORKGROUP_UNKNOWN'
 
 /** One typed workgroup failure. */
