@@ -132,12 +132,17 @@ export class WorkgroupRegistry extends Service {
       for (const member of options.members ?? []) validateRole(member.role)
       const id = WorkgroupId(randomUUID())
       const now = new Date().toISOString()
+      // The owner is already a member; duplicate entries (the owner itself or
+      // a repeated session) are dropped rather than persisted.
+      const seen = new Set<SessionId>([options.owner])
       const members = [
         { sessionId: options.owner, role: 'owner', joinedAt: now },
-        // The owner is already a member; any explicit entry naming it is a
-        // duplicate and is dropped rather than persisted.
         ...(options.members ?? [])
-          .filter(member => member.sessionId !== options.owner)
+          .filter(member => {
+            if (seen.has(member.sessionId)) return false
+            seen.add(member.sessionId)
+            return true
+          })
           .map(member => ({ ...member, joinedAt: now })),
       ]
       const record: WorkgroupRecord = {

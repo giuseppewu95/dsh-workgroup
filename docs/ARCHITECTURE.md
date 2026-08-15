@@ -4,7 +4,7 @@ Design rationale for `dsh-workgroup`. Read this before changing behavior; it rec
 
 ## 1. Problem and goal
 
-DeepSeek Harness already gives a coordinator session everything it needs to delegate: continuable subagents (`subagent`, `send_message`, `list_agents`, `report`), a GUI catalog of sub-sessions, and workspace-authorized log reading (`session_trace`, `session_event_read`). What it does **not** provide is a durable, first-class grouping of *sessions* with roles, and point-to-point messaging between *arbitrary* group members.
+DeepSeek Harness already gives a coordinator session everything it needs to delegate: continuable subagents (`subagent`, `send_message`, `list_agents`, `report`), a GUI catalog of sub-sessions, and a GUI that can open any session to read its transcript. What it does **not** provide is a durable, first-class grouping of *sessions* with roles, and point-to-point messaging between *arbitrary* group members.
 
 `dsh-workgroup` adds exactly that: a durable workgroup entity (named group + members + roles), a delivery path for member-to-member messages, and a browser panel that makes membership visible and navigable. The main session acts as the coordinator (plan → delegate → review → feedback).
 
@@ -45,7 +45,7 @@ domain 'workgroup' (version 1)
 Design decisions:
 
 - **Roles are free-text labels** (1..64 chars), not an enum. The vocabulary (规划/执行/测试) is a convention the model and the user agree on, not a fixed set — a plugin must not presume a closed role taxonomy.
-- **The owner is a member with role `owner`** and cannot be removed. Otherwise members are equal; `ownerSessionId` is descriptive, not an authority.
+- **The owner is a member with role `owner`** and cannot be removed. Members are otherwise equal; the only owner authority is dissolving the group (`workgroup_destroy`).
 - **`workgroupIds` order is the display order**, mirroring the workspace domain pattern. Reads are synchronous from an in-memory cache; the cache is authoritative in-process and rebuilt from the domain at boot.
 - **Bounds are validated at the service layer, not only in the zod schema.** `storage-domain` validates stored records only when the unit loads; a malformed value written today would refuse to load tomorrow, poisoning the whole domain. `validateRole`/`validateTitle` run before any write.
 
@@ -79,7 +79,7 @@ This is a defense against DNS-rebinding and cross-site reads, **not** authentica
 
 ## 7. Model tools and prompt design
 
-`workgroup_create`, `workgroup_list`, `workgroup_send`, `workgroup_members` are thin adapters over the registry, following the harness tool contract (`defineTool`). Tool descriptions are written from the model's perspective and pin the exact vocabulary the model sees; the system-prompt section (`tool:workgroup`) points at the review loop (`session_trace`/`session_event_read` + `workgroup_send`) so the coordinator pattern is discoverable.
+`workgroup_create`, `workgroup_list`, `workgroup_send`, `workgroup_members`, `workgroup_destroy` are thin adapters over the registry, following the harness tool contract (`defineTool`). Tool descriptions are written from the model's perspective and pin the exact vocabulary the model sees; the system-prompt section (`tool:workgroup`) points at the collaboration loop — delegate to member sessions, have each member report its result back through `workgroup_send`, open any member session in the GUI to read its transcript, and dissolve the group with `workgroup_destroy` when the owner is done. dsh 0.1.0-rc.6 ships no model-facing log-read tool, so the loop closes through member reports rather than a read-back tool.
 
 ## 8. Distribution model
 
@@ -92,7 +92,7 @@ This is a defense against DNS-rebinding and cross-site reads, **not** authentica
 
 - Point-to-point messaging only; no group multicast.
 - The panel is read-only (list + navigate); mutations go through model tools.
-- Groups may span workspaces; log reading stays workspace-authorized.
+- Groups may span workspaces; member transcripts are read by opening the session in the GUI or by asking the member to report back (no model-facing log-read tool in dsh 0.1.0-rc.6).
 - Destroy removes only the group record; delivered messages remain in member logs (immutable).
 - Cold-resumed agents stay live in the registry (no dispose), matching the host's own resolver semantics; this is deliberate — a follow-up message may target them again.
 
@@ -110,3 +110,5 @@ This is a defense against DNS-rebinding and cross-site reads, **not** authentica
 | 8 | `workgroups` never row-injected | The registry is mounted by the same plugin's apply; row-level inject deadlocks |
 | 9 | Cold-resumed agents not disposed | Matches host resolver semantics; supports follow-up delivery |
 | 10 | `workgroup` message source with `relay` form | Model-visible ⟺ logged; consistent with `coordinator`/`subagent-report` sources |
+| 11 | Owner-only destroy (`workgroup_destroy`) | Dissolving a shared coordination context is a lifecycle act; the flat model keeps membership egalitarian, not dissolution |
+| 12 | No model-facing log-read tool in the loop guidance | dsh 0.1.0-rc.6 ships none; the loop closes through member reports back through the group |

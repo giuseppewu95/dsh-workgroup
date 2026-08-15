@@ -58,15 +58,16 @@ function registryDouble(send = vi.fn()) {
     addMember: vi.fn(),
     removeMember: vi.fn(),
     setRole: vi.fn(),
+    destroy: vi.fn(),
     send,
   }
 }
 
 describe('workgroup tools', () => {
-  it('registers four tools and one prompt section', () => {
+  it('registers five tools and one prompt section', () => {
     const { registered, sections } = toolHarness()
     expect(registered.map(tool => tool.name).sort()).toEqual([
-      'workgroup_create', 'workgroup_list', 'workgroup_members', 'workgroup_send',
+      'workgroup_create', 'workgroup_destroy', 'workgroup_list', 'workgroup_members', 'workgroup_send',
     ])
     expect(sections).toEqual(['tool:workgroup'])
   })
@@ -167,7 +168,44 @@ describe('workgroup tools', () => {
     await expect(tool.execute(
       { action: 'add', group_id: 'g1', session_id: 's2' },
       { agent: fakeAgent('s1'), signal: new AbortController().signal },
-    )).rejects.toThrow('requires a role')
+    )).rejects.toMatchObject({ code: 'WORKGROUP_INVALID_INPUT', message: expect.stringContaining('requires a role') })
+  })
+
+  it('workgroup_members reports WORKGROUP_NOT_FOUND for an unknown group', async () => {
+    const { ctx, registered } = toolHarness()
+    ctx.provide('workgroups', registryDouble() as never)
+    const tool = registered.find(entry => entry.name === 'workgroup_members')!
+    await expect(tool.execute(
+      { action: 'add', group_id: 'nope', session_id: 's2', role: '执行' },
+      { agent: fakeAgent('s1'), signal: new AbortController().signal },
+    )).rejects.toMatchObject({ code: 'WORKGROUP_NOT_FOUND' })
+  })
+
+  it('workgroup_destroy dissolves a group the caller owns', async () => {
+    const { ctx, registered } = toolHarness()
+    const registry = registryDouble()
+    await registry.create({ title: 'g', owner: 's1' })
+    ctx.provide('workgroups', registry as never)
+    const tool = registered.find(entry => entry.name === 'workgroup_destroy')!
+    const result = await tool.execute(
+      { group_id: 'g1' },
+      { agent: fakeAgent('s1'), signal: new AbortController().signal },
+    ) as string
+    expect(result).toContain('destroyed')
+    expect(registry.destroy).toHaveBeenCalledWith(WorkgroupId('g1'))
+  })
+
+  it('workgroup_destroy rejects a non-owner caller', async () => {
+    const { ctx, registered } = toolHarness()
+    const registry = registryDouble()
+    await registry.create({ title: 'g', owner: 's1' })
+    ctx.provide('workgroups', registry as never)
+    const tool = registered.find(entry => entry.name === 'workgroup_destroy')!
+    await expect(tool.execute(
+      { group_id: 'g1' },
+      { agent: fakeAgent('s2'), signal: new AbortController().signal },
+    )).rejects.toMatchObject({ code: 'WORKGROUP_NOT_OWNER' })
+    expect(registry.destroy).not.toHaveBeenCalled()
   })
 
   it('rejects agentless execution', async () => {

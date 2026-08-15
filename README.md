@@ -15,7 +15,7 @@ A workgroup lets you run a real collaboration loop across sessions — one sessi
 | Piece | Description |
 |---|---|
 | `ctx.workgroups` | Host service: durable registry (via `storage-domain`), member management, and authorized cross-session delivery |
-| `workgroup_create` / `workgroup_list` / `workgroup_send` / `workgroup_members` | Model tools: form groups, assign roles (规划/执行/测试…), send messages to member sessions |
+| `workgroup_create` / `workgroup_list` / `workgroup_send` / `workgroup_members` / `workgroup_destroy` | Model tools: form groups, assign roles (规划/执行/测试…), send messages to member sessions, dissolve a group you own |
 | Browser panel | A button in the session header listing the current session's groups and members with roles and status; click a member to open that session |
 | `workgroup` message source | Messages delivered to a target session are logged as `user/message` with `source.kind: 'workgroup'` — model-visible, reconstructable from the log |
 
@@ -30,7 +30,7 @@ Authorization is **durable membership**, not lineage: the sender's session and t
 
 ## Install
 
-Prerequsites: dsh ≥ 0.1.0-rc.6, the `web` profile (or any profile with `storage-json` + `storage-domain` mounted).
+Prerequisites: dsh ≥ 0.1.0-rc.6, the `web` profile (or any profile with `storage-json` + `storage-domain` mounted).
 
 ```sh
 # from npm (once published)
@@ -50,7 +50,7 @@ Then restart `dsh --profile web`. The session header shows a "工作群" button 
 2. **Form the group**: call `workgroup_create` with a title and optional members, or add sessions later with `workgroup_members add`.
 3. **Assign roles**: `workgroup_members set_role` with labels like `规划`, `执行`, `测试`.
 4. **Direct the work**: `workgroup_send` to a member session — the message becomes that session's next turn.
-5. **Review**: read the member session's log with `session_trace` / `session_event_read` (workspace-authorized), then send findings back through the group.
+5. **Review**: have the member report its result back through the group (`workgroup_send` is bidirectional), or open the member session in the GUI to read its transcript, then send findings back through the group.
 6. **Watch live**: the browser panel lists member sessions with roles and running status; click a member to open it.
 
 ```text
@@ -64,7 +64,7 @@ Execution session (receives each message as its next turn):
   report: "X 已完成，见 <path>"
 
 You:
-  session_trace(session_id: "<exec>")          # verify what actually landed
+  workgroup_send(group_id: "<g>", target_session_id: "<exec>", message: "报告已收到，请补充 <path> 的测试用例")
   workgroup_send(group_id: "<g>", target_session_id: "<test>", message: "可以开始回归")
 ```
 
@@ -103,8 +103,8 @@ AGENTS.md            # fresh-session onboarding: layout, commands, design facts
 
 - The browser panel is read-only (list + navigate); creating groups and adding members happens through the model tools.
 - Workgroup messaging is point-to-point within a group; there is no multi-cast "group chat".
-- Members are equal; `ownerSessionId` is descriptive only (the owner cannot be removed, but has no extra authority).
-- Groups may span workspaces (messaging does not check `cwd`); reading a member's log is still governed by the workspace authorization of `session_trace` / `session_event_read`.
+- Members are equal; `ownerSessionId` is descriptive only — the owner cannot be removed, and only the owner can dissolve the group (`workgroup_destroy`).
+- Groups may span workspaces (messaging does not check `cwd`); member transcripts are read by opening the session in the GUI or by asking the member to report back through the group.
 - Destroying a group removes only the group record; already-delivered messages stay in member session logs (they are immutable).
 - The `/workgroup` HTTP API carries the same confused-deputy fence as the harness `/api` surface (loopback Host plus same-origin browser markers, mirrored locally because the harness does not export its fence). It is not an authentication layer; reachability still follows the webserver bind policy.
 - Built artifacts (`lib/`) are committed to the repository so git-based installs work without a build step. Rebuild before publishing with `npm run build`.

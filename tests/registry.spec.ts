@@ -138,6 +138,22 @@ describe('member mutations', () => {
     expect(group.members).toHaveLength(1)
     expect(group.members[0].role).toBe('owner')
   })
+
+  it('drops repeated non-owner entries on create (first occurrence wins)', async () => {
+    const { registry } = await harness()
+    const group = await registry.create({
+      title: 'g',
+      owner: SessionId('s1'),
+      members: [
+        { sessionId: SessionId('s2'), role: '执行' },
+        { sessionId: SessionId('s2'), role: '测试' },
+        { sessionId: SessionId('s3'), role: '测试' },
+      ],
+    })
+    expect(group.members).toHaveLength(3)
+    expect(group.members[1]).toMatchObject({ sessionId: SessionId('s2'), role: '执行' })
+    expect(group.members[2]).toMatchObject({ sessionId: SessionId('s3'), role: '测试' })
+  })
 })
 
 describe('input validation', () => {

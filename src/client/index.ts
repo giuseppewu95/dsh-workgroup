@@ -33,12 +33,14 @@ export const inject = ['locale', 'slots', 'sessions']
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-workgroup: dictionaries')
 
-  // One injected stylesheet per document, keyed so re-evaluation is idempotent.
+  // One injected stylesheet per document, keyed so re-evaluation is
+  // idempotent, and removed again when the plugin is stopped or updated.
   if (typeof document !== 'undefined' && !document.querySelector('style[data-plugin="dsh-workgroup"]')) {
     const tag = document.createElement('style')
     tag.dataset.plugin = 'dsh-workgroup'
     tag.textContent = WORKGROUP_CSS
     document.head.appendChild(tag)
+    ctx.effect(() => () => { tag.remove() }, 'dsh-workgroup: stylesheet')
   }
 
   // The inject face closes over the host JSON API and the sessions service.

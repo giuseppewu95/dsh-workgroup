@@ -6,10 +6,19 @@ All notable changes to this project are documented here. Format follows [Keep a 
 
 ### Added
 
+- `workgroup_destroy` tool: owner-only group dissolution (new `WORKGROUP_NOT_OWNER` error code).
 - `AGENTS.md` — fresh-session onboarding (layout, commands, design facts, troubleshooting).
 - `docs/ARCHITECTURE.md` — design rationale: layering, delivery semantics, concurrency, trust model, decision record.
 - `CONTRIBUTING.md`, `SECURITY.md`.
 - Full package metadata (`keywords`, `repository`, `homepage`, `bugs`, `author`, `engines`, `prepublishOnly`, `sideEffects`).
+
+### Fixed
+
+- Prompt guidance and docs no longer reference `session_trace` / `session_event_read` — dsh 0.1.0-rc.6 ships no such tools; the review loop closes through member reports back via `workgroup_send` or the GUI transcript.
+- `create` deduplicates repeated non-owner member entries (only the owner was filtered before).
+- `workgroup_members` reports `WORKGROUP_INVALID_INPUT` for a missing role and `WORKGROUP_NOT_FOUND` for an unknown group (was `WORKGROUP_UNKNOWN` / `WORKGROUP_NOT_MEMBER`).
+- Browser half removes its injected stylesheet on plugin stop; unused locale keys dropped.
+- `engines` floor now matches the harness runtime (`^22.19.0 || >=24.0.0`).
 
 ## [0.1.0] - 2026-08-15
 

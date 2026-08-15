@@ -26,9 +26,10 @@ export const inject = ['tools', 'systemPrompt']
 const PROMPT_TEXT =
   'Use workgroup_create to form a named group of sessions with roles (e.g. 规划/执行/测试), workgroup_list '
   + 'to see the groups your session belongs to and their members, workgroup_send to deliver a message to '
-  + 'another member session (it becomes that session\'s next turn), and workgroup_members to add, remove, or '
-  + 're-role members. Cross-session review loops: delegate work to subagents, then have a reviewer session '
-  + 'read their logs with session_trace/session_event_read and send findings back through the group.'
+  + 'another member session (it becomes that session\'s next turn), workgroup_members to add, remove, or '
+  + 're-role members, and workgroup_destroy to dissolve a group you own. Collaboration loop: delegate work '
+  + 'to member sessions, have each member report its result back through the group with workgroup_send, and '
+  + 'open any member session in the GUI to read its transcript.'
 
 /** Render one member for the list tool. */
 function memberRow(sessionId: string, role: string): string {
@@ -127,8 +128,8 @@ export function applyTools(ctx: Context): void {
     description:
       'Deliver a message to another member session of the same workgroup. The message becomes that session\'s '
       + 'next turn: if it is working, the message waits until its current turn finishes. This call returns '
-      + 'confirmation of delivery, not the target\'s answer — read its log later with session_trace or '
-      + 'session_event_read. A failure means the message was NOT delivered.',
+      + 'confirmation of delivery, not the target\'s answer — have the target report back through the group, '
+      + 'or open its session in the GUI to read the transcript. A failure means the message was NOT delivered.',
     parameters: {
       group_id: {
         type: 'string',
@@ -208,11 +209,14 @@ export function applyTools(ctx: Context): void {
       const groupId = WorkgroupId(args.group_id)
       const sessionId = SessionId(args.session_id)
       if (args.action !== 'remove' && (args.role === undefined || args.role === '')) {
-        throw new WorkgroupError('WORKGROUP_UNKNOWN', 'workgroup_members add/set_role requires a role')
+        throw new WorkgroupError('WORKGROUP_INVALID_INPUT', 'workgroup_members add/set_role requires a role')
       }
       // The caller must belong to the group to manage it.
       const view = ctx.workgroups.get(groupId)
-      if (view === undefined || !view.members.some(member => member.sessionId === agent.id)) {
+      if (view === undefined) {
+        throw new WorkgroupError('WORKGROUP_NOT_FOUND', `workgroup "${groupId}" does not exist`)
+      }
+      if (!view.members.some(member => member.sessionId === agent.id)) {
         throw new WorkgroupError('WORKGROUP_NOT_MEMBER', `session "${agent.id}" is not a member of this workgroup`)
       }
       switch (args.action) {
@@ -226,6 +230,40 @@ export function applyTools(ctx: Context): void {
           await ctx.workgroups.setRole(groupId, sessionId, args.role as string)
           return `session "${sessionId}" role set to "${args.role as string}" in workgroup "${groupId}"`
       }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'workgroup_destroy',
+    description:
+      'Permanently dissolve a workgroup that the calling session owns. Only the owner can destroy a group; '
+      + 'already-delivered messages stay in member session logs (they are immutable).',
+    parameters: {
+      group_id: {
+        type: 'string',
+        required: true,
+        description: 'Workgroup id returned by workgroup_create or workgroup_list.',
+      },
+    },
+    output: {
+      schema: { type: 'string' },
+      render: (_args, value) => [{ type: 'text', text: value }],
+    },
+    async execute(args, exec) {
+      const agent = requireAgent(exec.agent)
+      const groupId = WorkgroupId(args.group_id)
+      const view = ctx.workgroups.get(groupId)
+      if (view === undefined) {
+        throw new WorkgroupError('WORKGROUP_NOT_FOUND', `workgroup "${groupId}" does not exist`)
+      }
+      if (view.ownerSessionId !== agent.id) {
+        throw new WorkgroupError(
+          'WORKGROUP_NOT_OWNER',
+          `session "${agent.id}" is not the owner of workgroup "${groupId}"`,
+        )
+      }
+      await ctx.workgroups.destroy(groupId)
+      return `workgroup "${groupId}" destroyed`
     },
   }))
 }

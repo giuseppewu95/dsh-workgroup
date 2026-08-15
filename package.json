@@ -21,7 +21,7 @@
     "url": "https://github.com/your-name/dsh-workgroup/issues"
   },
   "engines": {
-    "node": ">=18"
+    "node": "^22.19.0 || >=24.0.0"
   },
   "sideEffects": [
     "./lib/client.js"

@@ -8,8 +8,6 @@
 export declare const NS = "workgroup";
 /** Simplified Chinese dictionary (the key-set source of truth). */
 export declare const zh: {
-    readonly 'actions.open': "打开工作群";
-    readonly 'actions.close': "关闭工作群";
     readonly 'count.zero': "无工作群";
     readonly 'count.one': "1 个工作群";
     readonly 'count.other': "{count} 个工作群";

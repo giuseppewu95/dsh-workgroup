@@ -10,8 +10,6 @@ export const NS = 'workgroup'
 
 /** Simplified Chinese dictionary (the key-set source of truth). */
 export const zh = {
-  'actions.open': '打开工作群',
-  'actions.close': '关闭工作群',
   'count.zero': '无工作群',
   'count.one': '1 个工作群',
   'count.other': '{count} 个工作群',
@@ -27,8 +25,6 @@ export const zh = {
 
 /** English dictionary, key-identical to the Chinese source of truth. */
 export const en: Record<WorkgroupKey, string> = {
-  'actions.open': 'Open workgroups',
-  'actions.close': 'Close workgroups',
   'count.zero': 'No workgroups',
   'count.one': '1 workgroup',
   'count.other': '{count} workgroups',

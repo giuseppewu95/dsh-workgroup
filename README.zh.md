@@ -15,7 +15,7 @@ DeepSeek Harness 的可分发插件：带角色的持久会话分组（工作群
 | 组成 | 说明 |
 |---|---|
 | `ctx.workgroups` | Host 服务：持久注册表（基于 storage-domain）、成员管理、授权跨会话投递 |
-| `workgroup_create` / `workgroup_list` / `workgroup_send` / `workgroup_members` | 模型工具：建群、分配角色（规划/执行/测试…）、向成员会话发消息 |
+| `workgroup_create` / `workgroup_list` / `workgroup_send` / `workgroup_members` / `workgroup_destroy` | 模型工具：建群、分配角色（规划/执行/测试…）、向成员会话发消息、解散自己创建的群 |
 | 浏览器面板 | 会话头部按钮：列出本会话所属群与成员（角色 + 运行状态），点击成员直接打开该会话 |
 | `workgroup` 消息源 | 投递到目标会话的消息以 `user/message`（`source.kind: 'workgroup'`）落日志——模型可见、可从日志重建 |
 
@@ -50,7 +50,7 @@ dsh plugin --profile web add github:your-name/dsh-workgroup
 2. **建群**：`workgroup_create`（标题 + 可选初始成员），之后可用 `workgroup_members add` 追加。
 3. **分配角色**：`workgroup_members set_role`，标签如 `规划`、`执行`、`测试`。
 4. **派发工作**：`workgroup_send` 给成员会话——消息成为该会话的下一轮次。
-5. **审查**：用 `session_trace` / `session_event_read` 读成员会话日志（按 workspace 授权），再把意见经工作群发回。
+5. **审查**：让成员经工作群回传结果（`workgroup_send` 是双向的），或在 GUI 中打开成员会话阅读其记录，再把意见经工作群发回。
 6. **实时查看**：浏览器面板显示成员角色与运行状态，点击即可打开对应会话。
 
 ```text
@@ -64,7 +64,7 @@ dsh plugin --profile web add github:your-name/dsh-workgroup
   report: "X 已完成，见 <path>"
 
 你：
-  session_trace(session_id: "<exec>")          # 核对实际落地内容
+  workgroup_send(group_id: "<g>", target_session_id: "<exec>", message: "报告已收到，请补充 <path> 的测试用例")
   workgroup_send(group_id: "<g>", target_session_id: "<test>", message: "可以开始回归")
 ```
 
@@ -103,8 +103,8 @@ AGENTS.md            # 新手会话快速上手：结构、命令、设计要点
 
 - 浏览器面板只读（列表 + 跳转）；建群与加员通过模型工具完成。
 - 工作群消息是群内点对点，暂不支持群广播。
-- 成员权限平等；`ownerSessionId` 仅作记录（owner 不可被移除，但无额外权限）。
-- 群可跨 workspace（消息投递不校验 `cwd`）；读取成员日志仍受 `session_trace` / `session_event_read` 的 workspace 授权约束。
+- 成员权限平等；`ownerSessionId` 仅作记录——owner 不可被移除，且只有 owner 能解散群（`workgroup_destroy`）。
+- 群可跨 workspace（消息投递不校验 `cwd`）；阅读成员记录通过 GUI 打开该会话，或让成员经工作群回传结果。
 - 销毁群只删除群记录；已投递消息保留在成员会话日志中（日志不可变）。
 - `/workgroup` HTTP API 采用与 harness `/api` 相同的 confused-deputy 防护（回环 Host + 同源浏览器标记；因 harness 未导出其围栏，插件本地镜像同一规则）。这不是认证层；可达性仍由 webserver 绑定策略决定。
 - 构建产物（`lib/`）已提交到仓库，git 安装无需构建步骤；发布前请重新 `npm run build`。
