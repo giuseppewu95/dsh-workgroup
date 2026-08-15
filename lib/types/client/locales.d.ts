@@ -16,6 +16,10 @@ export declare const zh: {
     readonly 'member.open': "打开该会话";
     readonly 'member.running': "运行中";
     readonly 'member.inactive': "空闲";
+    readonly 'time.just_now': "刚刚";
+    readonly 'time.minutes_ago': "{n} 分钟前";
+    readonly 'time.hours_ago': "{n} 小时前";
+    readonly 'time.days_ago': "{n} 天前";
     readonly empty: "本会话不属于任何工作群。";
     readonly 'load.error': "工作群加载失败";
     readonly retry: "重试";

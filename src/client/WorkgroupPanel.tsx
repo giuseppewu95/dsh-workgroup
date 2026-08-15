@@ -63,9 +63,20 @@ function groupRows(
 /** Status label and dot for one member row. */
 function memberStatus(member: MemberRow, t: Translate): { state: 'ongoing' | 'done'; label: string } {
   if (member.summary === undefined) return { state: 'done', label: t('member.inactive') }
-  return member.summary.running
-    ? { state: 'ongoing', label: t('member.running') }
-    : { state: 'done', label: t('member.inactive') }
+  if (member.summary.running) return { state: 'ongoing', label: t('member.running') }
+  return { state: 'done', label: t('member.inactive') }
+}
+
+/** Relative "last active" label for an idle member, derived from the session kit. */
+function lastActiveLabel(member: MemberRow, now: number, t: Translate): string | undefined {
+  if (member.summary === undefined || member.summary.running) return undefined
+  const elapsed = Math.max(0, now - (member.summary.updatedAt ?? 0))
+  if (elapsed < 60_000) return t('time.just_now')
+  const minutes = Math.floor(elapsed / 60_000)
+  if (minutes < 60) return t('time.minutes_ago', { n: minutes })
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return t('time.hours_ago', { n: hours })
+  return t('time.days_ago', { n: Math.floor(hours / 24) })
 }
 
 /** Member row title: durable title, then id. */
@@ -179,6 +190,7 @@ export function WorkgroupPanel({
                   <div role="group" className="dsh-wg-members">
                     {members.map(member => {
                       const status = memberStatus(member, t)
+                      const recent = lastActiveLabel(member, Date.now(), t)
                       return (
                         <button
                           key={member.sessionId}
@@ -190,7 +202,9 @@ export function WorkgroupPanel({
                           <StateDot state={status.state} />
                           <span className="dsh-wg-member-title">{memberTitle(member)}</span>
                           <span className="dsh-wg-member-role">{member.role}</span>
-                          <span className="dsh-wg-member-status">{status.label}</span>
+                          <span className="dsh-wg-member-status">
+                            {recent === undefined ? status.label : `${status.label} · ${recent}`}
+                          </span>
                         </button>
                       )
                     })}

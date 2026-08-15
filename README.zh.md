@@ -16,7 +16,7 @@ DeepSeek Harness 的可分发插件：带角色的持久会话分组（工作群
 |---|---|
 | `ctx.workgroups` | Host 服务：持久注册表（基于 storage-domain）、成员管理、授权跨会话投递 |
 | `workgroup_create` / `workgroup_list` / `workgroup_send` / `workgroup_members` / `workgroup_destroy` / `workgroup_status` | 模型工具：建群、分配角色（规划/执行/测试…）、向成员会话发消息、解散自己创建的群、查询已投递消息的观测状态 |
-| 浏览器面板 | 会话头部按钮：列出本会话所属群与成员（角色 + 运行状态），点击成员直接打开该会话 |
+| 浏览器面板 | 会话头部按钮：列出本会话所属群与成员（角色 + 运行/空闲状态 + 相对最近活跃时间），点击成员直接打开该会话 |
 | `workgroup` 消息源 | 投递到目标会话的消息以 `user/message`（`source.kind: 'workgroup'`）落日志——模型可见、可从日志重建 |
 
 ### 跨会话投递如何工作

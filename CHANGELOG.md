@@ -16,6 +16,7 @@ All notable changes to this project are documented here. Format follows [Keep a 
   `docs/decisions/2026-08-15-delivery-ack-boundary.md`.
 - Real-model e2e baseline (`npm run test:e2e`): repeatable multi-session collaboration flow in a throwaway `DSH_HOME` (coordinator/executor/tester), asserting durable group records, `workgroup`-sourced messages in target session logs, the produced artifact, and at least one message reaching `turn_completed`. Skips (exit 0) without credentials; never part of `npm test`/CI.
 - Resource limits as protocol constants (not config): 64 workgroups, 32 members per group (owner included), 256 KiB serialized bytes per message (UTF-8). Enforced at the service layer with a new `WORKGROUP_LIMIT_EXCEEDED` code; no partial writes on rejection.
+- Panel: idle members show a relative last-active label derived from the session kit (`updatedAt`), no new API or authorization surface.
 
 ## [0.1.0] - 2026-08-15
 

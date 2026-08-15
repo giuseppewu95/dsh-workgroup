@@ -53,14 +53,19 @@ function props(overrides: {
         'member.open': '打开该会话',
         'member.running': '运行中',
         'member.inactive': '空闲',
+        'time.just_now': '刚刚',
+        'time.minutes_ago': '{n} 分钟前',
+        'time.hours_ago': '{n} 小时前',
+        'time.days_ago': '{n} 天前',
         'empty': '本会话不属于任何工作群。',
         'load.error': '工作群加载失败',
         'retry': '重试',
       }
       const text = dict[key] ?? key
-      return params === undefined
-        ? text
-        : text.replaceAll('{count}', String(params.count))
+      if (params === undefined) return text
+      return text
+        .replaceAll('{count}', String(params.count))
+        .replaceAll('{n}', String(params.n))
     }) as never,
   } as unknown as WorkgroupPanelProps
 }
@@ -112,6 +117,29 @@ describe('WorkgroupPanel', () => {
     // Navigate to the member.
     fireEvent.click(screen.getByText('执行会话'))
     expect(openMember).toHaveBeenCalledWith('s2')
+  })
+
+  it('shows a relative last-active label for idle members', async () => {
+    const groups: WorkgroupGroupWire[] = [{
+      id: 'g1', title: '开发组', ownerSessionId: 's1',
+      members: [
+        { sessionId: 's1', role: 'owner' },
+        { sessionId: 's2', role: '执行' },
+      ],
+    }]
+    const fiveMinutesAgo = Date.now() - 5 * 60 * 1000
+    render(<WorkgroupPanel {...props({
+      groups,
+      summaries: {
+        s1: summary('s1', false, '规划会话'),
+        s2: { ...summary('s2', false, '执行会话'), updatedAt: fiveMinutesAgo },
+      },
+    })} />)
+    fireEvent.click(screen.getByRole('button', { name: '无工作群' }))
+    fireEvent.click(await screen.findByText('开发组'))
+    expect(await screen.findByText(/5 分钟前/)).toBeTruthy()
+    // Running members show no relative time.
+    expect(screen.queryByText(/分钟前/)).toBeTruthy()
   })
 
   it('shows the empty state when the session belongs to no group', async () => {
