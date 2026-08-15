@@ -39,7 +39,7 @@ interface Harness {
   addAgent: (agent: Agent) => void
 }
 
-async function harness(pool = new Map()): Promise<Harness> {
+async function harness(pool = new Map(), withAgents = true): Promise<Harness> {
   const ctx = new Context()
   await ctx.plugin(Storage)
   ctx.storage.backend.register('memory', new MemoryStorageBackend(pool))
@@ -50,10 +50,12 @@ async function harness(pool = new Map()): Promise<Harness> {
   const followups: Array<{ id: string; source: unknown }> = []
   const resume = vi.fn()
   const live = new Map<string, Agent>()
-  ctx.provide('agents', {
-    get: (id: SessionId) => live.get(String(id)),
-    resume,
-  } as never)
+  if (withAgents) {
+    ctx.provide('agents', {
+      get: (id: SessionId) => live.get(String(id)),
+      resume,
+    } as never)
+  }
 
   const fiber = await ctx.plugin(WorkgroupRegistry)
   return {
@@ -218,6 +220,25 @@ describe('destroy', () => {
 })
 
 describe('send authorization matrix', () => {
+  it('maps a missing agents service to a typed delivery error', async () => {
+    // Regression: delivery must read `agents` through ctx.get. The Loader
+    // mounts the plugin on an entry context whose own inject list is only
+    // ['storageDomain']; property access (ctx.agents) fails behind the loader's
+    // isolate boundary with an untyped error. With no agents service at all,
+    // ctx.get returns undefined and the typed WORKGROUP_TARGET_UNAVAILABLE is
+    // the contract — a property-access regression would throw TypeError here.
+    const { registry } = await harness(new Map(), false)
+    const group = await registry.create({ title: 'g', owner: SessionId('s1') })
+    await registry.addMember({ groupId: group.id, sessionId: SessionId('s2'), role: '执行' })
+    await expect(registry.send({
+      sender: fakeAgent('s1'),
+      groupId: group.id,
+      targetSessionId: SessionId('s2'),
+      content: [{ type: 'text', text: 'x' }],
+      signal,
+    })).rejects.toMatchObject({ code: 'WORKGROUP_TARGET_UNAVAILABLE' })
+  })
+
   it('delivers to a live top-level member', async () => {
     const { registry, followups, addAgent } = await harness()
     const sender = fakeAgent('s1')

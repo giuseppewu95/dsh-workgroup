@@ -19,7 +19,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { Agent, AgentRegistry } from '@deepseek-ai/dsh-agent'
 import { createUserMessage, type ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionPersistence } from '@deepseek-ai/dsh-session-persistence'
@@ -46,7 +46,8 @@ export async function resolveDeliveryTarget(
   request: WorkgroupDeliveryRequest,
 ): Promise<Agent> {
   const { sender, targetSessionId } = request
-  const live = ctx.agents.get(targetSessionId)
+  const agents = requireAgents(ctx)
+  const live = agents.get(targetSessionId)
   if (live !== undefined) {
     // A continuable child of the sender is owned by the continuation manager;
     // deliver through it below instead of followup directly.
@@ -89,22 +90,40 @@ export async function resolveDeliveryTarget(
         : `workgroup target "${targetSessionId}" is a subagent child and is not resumable here`,
     )
   }
-  const agent = await resumeOnce(ctx, targetSessionId)
+  const agent = await resumeOnce(ctx, agents, targetSessionId)
   return agent
+}
+
+/** Resolve the agents service through the store (never property access: the
+ * registry's context injects only storageDomain, and property access without
+ * a declared inject throws in Cordis). */
+function requireAgents(ctx: Context): AgentRegistry {
+  const agents = ctx.get('agents') as AgentRegistry | undefined
+  if (agents === undefined) {
+    throw new WorkgroupError(
+      'WORKGROUP_TARGET_UNAVAILABLE',
+      'workgroup delivery requires the agents service, which is not mounted',
+    )
+  }
+  return agents
 }
 
 /** In-flight cold resumes per identity; never expires, exactly like api-remotes. */
 const resumes = new Map<SessionId, Promise<Agent>>()
 
 /** Resume a cold top-level session once per identity, deduplicating concurrent callers. */
-async function resumeOnce(ctx: Context, sessionId: SessionId): Promise<Agent> {
+async function resumeOnce(
+  ctx: Context,
+  agents: AgentRegistry,
+  sessionId: SessionId,
+): Promise<Agent> {
   const pending = resumes.get(sessionId)
   if (pending !== undefined) return pending
   const attempt = (async () => {
     try {
       const agentDefaultModel = ctx.get('agentDefaultModel')
       const selection = agentDefaultModel?.currentSelection()
-      const handle = await ctx.agents.resume({
+      const handle = await agents.resume({
         resumeSessionId: sessionId,
         ...selection === undefined
           ? {}

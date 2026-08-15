@@ -14,6 +14,7 @@ All notable changes to this project are documented here. Format follows [Keep a 
 
 ### Fixed
 
+- Delivery reads the `agents` service through `ctx.get` instead of property access — the Loader mounts the plugin on an entry context whose inject list is only `['storageDomain']`, so `ctx.agents` threw "cannot get property without inject" and every cold-resume/live `workgroup_send` failed in a real profile (caught by real-model e2e; unit regression test added).
 - Prompt guidance and docs no longer reference `session_trace` / `session_event_read` — dsh 0.1.0-rc.6 ships no such tools; the review loop closes through member reports back via `workgroup_send` or the GUI transcript.
 - `create` deduplicates repeated non-owner member entries (only the owner was filtered before).
 - `workgroup_members` reports `WORKGROUP_INVALID_INPUT` for a missing role and `WORKGROUP_NOT_FOUND` for an unknown group (was `WORKGROUP_UNKNOWN` / `WORKGROUP_NOT_MEMBER`).
