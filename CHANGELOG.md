@@ -2,7 +2,12 @@
 
 All notable changes to this project are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.1.1] - 2026-08-15
+
+Patch release carrying the fully verified frozen baseline (commit `096ab07`):
+`workgroup_spawn`, message status semantics, onboarding guidance, actionable
+errors, and the trusted-host fence fix. `0.1.0` exists on npm/GitHub; this is
+its follow-up patch release.
 
 ### Added
 

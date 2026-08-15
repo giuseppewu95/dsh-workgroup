@@ -1,7 +1,7 @@
 {
   "name": "dsh-workgroup",
   "description": "Durable workgroup capability for DeepSeek Harness: named session groups with roles, cross-session messaging, and a GUI member panel",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "license": "MIT",
   "keywords": [
     "deepseek-harness",
