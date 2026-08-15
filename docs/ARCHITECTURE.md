@@ -76,7 +76,7 @@ The GUI half reads `/workgroup/list` over same-origin fetch. The harness's `/api
 - `sec-fetch-site: cross-site` is refused;
 - an attached `Origin` must equal the Host authority.
 
-Trusted authorities are read from `ctx.webRuntime.trustedHosts` — the same source the harness `/api` fence uses — so a deployment reachable through a Tailscale/LAN hostname (`--trusted-host`) trusts the same names for both surfaces.
+Trusted authorities are read from the connection service's `trustedHosts` — the exact same source the harness `/api` fence uses — so a deployment reachable through a Tailscale/LAN hostname trusts the same names for both surfaces.
 
 This is a defense against DNS-rebinding and cross-site reads, **not** authentication; reachability still follows the webserver bind policy (documented in the README).
 

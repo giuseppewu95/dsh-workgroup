@@ -22,7 +22,7 @@ All notable changes to this project are documented here. Format follows [Keep a 
 
 ### Fixed
 
-- `/workgroup` trust fence now accepts the deployment's `trustedHosts` (read from `ctx.webRuntime`, the same source the harness `/api` fence uses) in addition to loopback — the panel previously 403'd when the GUI was reached through a Tailscale/LAN hostname (`--trusted-host`).
+- `/workgroup` trust fence now accepts the deployment's `trustedHosts` (read from the connection service — the exact same source the harness `/api` fence uses) in addition to loopback — the panel previously 403'd when the GUI was reached through a Tailscale/LAN hostname.
 
 ## [0.1.0] - 2026-08-15
 

@@ -123,7 +123,7 @@ describe('/workgroup/list', () => {
     expect(dispose).toBeUndefined()
   })
 
-  it('accepts a trusted non-loopback authority from webRuntime', async () => {
+  it('accepts a trusted non-loopback authority from the connection service', async () => {
     const ctx = new Context()
     const handlers: Array<(r: IncomingMessage, s: ServerResponse) => void> = []
     ctx.provide('webServer', {
@@ -132,7 +132,7 @@ describe('/workgroup/list', () => {
         return () => {}
       },
     } as never)
-    ctx.provide('webRuntime', { trustedHosts: ['tail.example.net'] } as never)
+    ctx.provide('connection', { trustedHosts: ['tail.example.net'] } as never)
     ctx.provide('workgroups', registryDouble() as never)
     registerWorkgroupApi(ctx, registryDouble() as unknown as WorkgroupRegistry)
     const { res, state } = fakeRes()
@@ -145,7 +145,7 @@ describe('/workgroup/list', () => {
     expect(state.status).toBe(200)
   })
 
-  it('still 403s a non-loopback host outside webRuntime trustedHosts', async () => {
+  it('still 403s a non-loopback host outside the connection trustedHosts', async () => {
     const ctx = new Context()
     const handlers: Array<(r: IncomingMessage, s: ServerResponse) => void> = []
     ctx.provide('webServer', {
@@ -154,7 +154,7 @@ describe('/workgroup/list', () => {
         return () => {}
       },
     } as never)
-    ctx.provide('webRuntime', { trustedHosts: ['tail.example.net'] } as never)
+    ctx.provide('connection', { trustedHosts: ['tail.example.net'] } as never)
     ctx.provide('workgroups', registryDouble() as never)
     registerWorkgroupApi(ctx, registryDouble() as unknown as WorkgroupRegistry)
     const { res, state } = fakeRes()

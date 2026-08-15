@@ -40,11 +40,12 @@ export function registerWorkgroupApi(
 ): (() => void) | undefined {
   const webServer = ctx.get('webServer')
   if (webServer === undefined) return undefined
-  // The same trusted authorities the harness /api fence accepts: a deployment
-  // reachable through a Tailscale/LAN hostname must trust that name for this
-  // surface too, or the panel's fetch would 403 from the browser.
-  const webRuntime = ctx.get('webRuntime') as { trustedHosts?: readonly string[] } | undefined
-  const trustedHosts = webRuntime?.trustedHosts ?? []
+  // The same trusted authorities the harness /api fence accepts: the
+  // connection service's trustedHosts (deployment config, e.g. a Tailscale or
+  // LAN hostname). Without this, the panel's fetch 403s whenever the GUI is
+  // reached through a non-loopback hostname.
+  const connection = ctx.get('connection') as { trustedHosts?: readonly string[] } | undefined
+  const trustedHosts = connection?.trustedHosts ?? []
   return webServer.register({
     kind: 'prefix',
     path: '/workgroup',
