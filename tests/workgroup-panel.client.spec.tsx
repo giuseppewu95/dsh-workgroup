@@ -142,10 +142,10 @@ describe('WorkgroupPanel', () => {
     expect(screen.queryByText(/分钟前/)).toBeTruthy()
   })
 
-  it('shows the empty state when the session belongs to no group', async () => {
+  it('shows the empty state with onboarding guidance when the session belongs to no group', async () => {
     render(<WorkgroupPanel {...props({ groups: [] })} />)
     fireEvent.click(screen.getByRole('button', { name: '无工作群' }))
-    expect(await screen.findByText('本会话不属于任何工作群。')).toBeTruthy()
+    expect(await screen.findByText(/创建标题为 X 的工作群/)).toBeTruthy()
   })
 
   it('shows load errors with a retry', async () => {
